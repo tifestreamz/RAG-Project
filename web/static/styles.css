@@ -590,3 +590,150 @@ select {
     grid-template-columns: 1fr;
   }
 }
+
+/* Architecture & Evaluation Walkthrough Page (/architecture) */
+.header-link.active {
+  background: #1d4ed8;
+  border-color: #3b82f6;
+  color: #ffffff;
+}
+
+.arch-shell {
+  max-width: 1380px;
+  margin: 0 auto;
+  padding: 18px 20px 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.kpi-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.kpi-label {
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.kpi-value {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.kpi-sub {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.diagram-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fcfdff;
+  padding: 10px;
+}
+
+.arch-svg {
+  width: 100%;
+  min-width: 780px;
+  height: auto;
+  display: block;
+}
+
+.arch-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.data-table-wrap {
+  overflow-x: auto;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.83rem;
+}
+
+.data-table th,
+.data-table td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.data-table th {
+  font-weight: 700;
+  color: var(--muted);
+  background: var(--surface-alt);
+}
+
+.data-table tr.highlight-row td {
+  background: #eff6ff;
+  font-weight: 600;
+}
+
+.tool-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.tool-chip {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.77rem;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-alt);
+  color: #0f172a;
+}
+
+.tool-chip-rag {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1e40af;
+}
+
+.tool-chip-hr {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #065f46;
+}
+
+.arch-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.arch-list li {
+  margin-bottom: 6px;
+}
+
+@media (max-width: 960px) {
+  .kpi-grid,
+  .arch-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}

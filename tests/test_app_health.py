@@ -21,6 +21,10 @@ def test_app_startup_health_and_chat_endpoints() -> None:
         assert index_resp.status_code == 200
         assert "Northstar HR Policy" in index_resp.text
 
+        arch_resp = client.get("/architecture")
+        assert arch_resp.status_code == 200
+        assert "System &amp; Render Free-Tier Architecture" in arch_resp.text
+
         demos = client.get("/demo-tasks")
         assert demos.status_code == 200
         ddata = demos.json()

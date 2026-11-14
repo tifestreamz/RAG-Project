@@ -178,6 +178,12 @@ async def serve_index() -> FileResponse:
     return FileResponse(STATIC_DIR / "index.html")
 
 
+@app.get("/architecture", include_in_schema=False)
+async def serve_architecture() -> FileResponse:
+    """Serve the live system architecture, CI/CD, and evaluation walkthrough page."""
+    return FileResponse(STATIC_DIR / "architecture.html")
+
+
 @app.get("/health")
 async def health_check() -> dict[str, Any]:
     """Readiness probe reporting loaded RAG corpus metadata and live MCP connection."""

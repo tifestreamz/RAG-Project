@@ -2,7 +2,8 @@
 
 An end-to-end **Agentic Retrieval-Augmented Generation (Hybrid RAG) + Model Context Protocol (MCP)** web application for *Northstar Cloud Labs, Inc.* designed to answer HR policy questions with verifiable section/page citations, evaluate employee eligibility against structured HR records, draft compliant approval communications, and enforce human-in-the-loop confirmation before writing mock HR tickets.
 
-- **Deployment Readiness:** Configured for **Render Free Tier** via [Dockerfile](Dockerfile) and [render.yaml](render.yaml) (live deployment details & cold-start notes documented in [deployed.md](deployed.md)).
+- **Live Deployed App (Render Free Tier):** https://northstar-hr-agentic-rag.onrender.com ([UI](https://northstar-hr-agentic-rag.onrender.com/) | [System Architecture & Eval](https://northstar-hr-agentic-rag.onrender.com/architecture) | [Health JSON](https://northstar-hr-agentic-rag.onrender.com/health) | [Swagger Docs](https://northstar-hr-agentic-rag.onrender.com/docs))
+- **Deployment Config & Live Notes:** [Dockerfile](Dockerfile) | [render.yaml](render.yaml) | [deployed.md](deployed.md)
 - **Key Architecture Docs:** [design-and-evaluation.md](design-and-evaluation.md) | [ai-tooling.md](ai-tooling.md) | [mcp_server/README.md](mcp_server/README.md)
 
 ---
@@ -107,8 +108,8 @@ Generated reports are saved to `evaluation/results/eval_report.json` and `evalua
 
 ---
 
-## Solo Submission & Deployment Checklist
+## Deployment & Cold-Start Behavior
 
-1. Push repository to GitHub (private or public; grant read access to **`quantic-grader`**).
-2. Add `GEMINI_API_KEY` (optional/recommended for live LLM) and `RENDER_DEPLOY_HOOK_URL` (optional for GitHub Actions `deploy` job) in Render / GitHub Secrets.
-3. Deploy via Render Blueprint (`render.yaml`) or Docker Web Service, verify `/health`, and update the live URL + measured cold-start timing in [deployed.md](deployed.md).
+- **Live URL:** `https://northstar-hr-agentic-rag.onrender.com`
+- **GitHub Repository & Grader Access:** `https://github.com/tifestreamz/RAG-Project` (`quantic-grader` invited)
+- **Render Free Tier Cold Starts:** Render Free Web Services spin down after **15 minutes of HTTP inactivity**. On the first request after sleep, expect a **~25–50 second cold-start wake delay** while Render starts the Docker container (`web.app` boots immediately on the prebuilt `hash` FAISS/SQLite index baked by `Dockerfile`, then upgrades to `gemini-embedding-001` in the background over ~1–2 minutes to respect Gemini Free-Tier 100 items/min embedding limits). Warm requests respond normally once awake (`<1s` `/health`, ~3–21s live Gemini `/chat` workflows). Full deployment details and measured timings are in [deployed.md](deployed.md).
