@@ -21,9 +21,29 @@ def test_app_startup_health_and_chat_endpoints() -> None:
         assert index_resp.status_code == 200
         assert "Northstar HR Policy" in index_resp.text
 
+        corpus_resp = client.get("/corpus")
+        assert corpus_resp.status_code == 200
+        assert "Policy corpus" in corpus_resp.text
+
+        corpus_api = client.get("/api/corpus")
+        assert corpus_api.status_code == 200
+        corpus_payload = corpus_api.json()
+        assert corpus_payload["doc_count"] == 12
+        assert corpus_payload["chunk_count"] == 117
+        assert len(corpus_payload["documents"]) == 12
+
+        pol_detail = client.get("/api/corpus/POL-003")
+        assert pol_detail.status_code == 200
+        pol_payload = pol_detail.json()
+        assert len(pol_payload["sections"]) > 0
+        assert len(pol_payload["chunks"]) == pol_payload["chunk_count"] > 0
+
+        assert client.get("/api/corpus/POL-999").status_code == 404
+
         arch_resp = client.get("/architecture")
         assert arch_resp.status_code == 200
-        assert "System &amp; Render Free-Tier Architecture" in arch_resp.text
+        assert "Architecture &amp; evaluation" in arch_resp.text
+        assert "System architecture" in arch_resp.text
 
         demos = client.get("/demo-tasks")
         assert demos.status_code == 200

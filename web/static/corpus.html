@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Policy corpus — Northstar HR Policy Copilot</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to main content</a>
+
+    <header class="top-nav">
+      <div class="nav-inner">
+        <div class="nav-left">
+          <a class="brand" href="/">
+            <span class="brand-mark" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M8 1L9.75 6.25L15 8L9.75 9.75L8 15L6.25 9.75L1 8L6.25 6.25L8 1Z"/>
+              </svg>
+            </span>
+            <span>
+              <span class="brand-title">Northstar</span><span class="brand-sub">HR Policy Copilot</span>
+            </span>
+          </a>
+          <nav class="nav-links" aria-label="Primary navigation">
+            <a class="nav-link" href="/">Copilot</a>
+            <a class="nav-link active" href="/corpus" aria-current="page">Policy corpus</a>
+            <a class="nav-link" href="/architecture">Architecture &amp; eval</a>
+          </nav>
+        </div>
+
+        <div class="nav-right">
+          <a id="nav-corpus-link" class="nav-stat-link active" href="/corpus" title="Open Policy corpus">
+            <span id="nav-status-dot" class="status-dot"></span>
+            <span id="nav-corpus-text"><strong>12</strong> docs · <strong>117</strong> chunks</span>
+          </a>
+          <span class="nav-sep" aria-hidden="true"></span>
+          <span id="nav-mcp-stat" class="nav-stat">MCP stdio · <strong>8 tools</strong></span>
+          <span class="nav-sep" aria-hidden="true"></span>
+          <span id="nav-model-stat" class="nav-stat">Model · <strong>Gemini</strong></span>
+          <a class="api-docs-btn" href="/docs" target="_blank" rel="noopener">API docs ↗</a>
+        </div>
+      </div>
+    </header>
+
+    <main id="main-content" class="corpus-shell">
+      <div class="corpus-intro">
+        <h1 class="page-title">Policy corpus</h1>
+        <p id="corpus-subtitle" class="page-subtitle">
+          The 12 documents the copilot answers from, split into 117 chunks for hybrid retrieval (FAISS + BM25, fused with RRF). Open a document to read it or inspect the chunks the retriever searches.
+        </p>
+      </div>
+
+      <div class="corpus-toolbar">
+        <label class="search-wrap">
+          <svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <circle cx="11" cy="11" r="7"/>
+            <path d="m20 20-3.5-3.5"/>
+          </svg>
+          <input
+            id="corpus-search"
+            class="search-input"
+            type="search"
+            placeholder="Search by title or policy ID"
+            aria-label="Search policies by title, ID, or category"
+          >
+        </label>
+
+        <div id="format-filters" class="filter-segmented" role="group" aria-label="Filter documents by format">
+          <button type="button" class="filter-pill active" data-format="all">All 12</button>
+          <button type="button" class="filter-pill" data-format="html">HTML 5</button>
+          <button type="button" class="filter-pill" data-format="pdf">PDF 4</button>
+          <button type="button" class="filter-pill" data-format="markdown">Markdown 2</button>
+          <button type="button" class="filter-pill" data-format="txt">Text 1</button>
+        </div>
+      </div>
+
+      <div class="corpus-table-card">
+        <table class="corpus-table" aria-label="Northstar HR policy documents">
+          <thead>
+            <tr>
+              <th scope="col">Policy</th>
+              <th scope="col">Document</th>
+              <th scope="col">Category</th>
+              <th scope="col">Format</th>
+              <th scope="col">Chunks</th>
+            </tr>
+          </thead>
+          <tbody id="corpus-tbody">
+            <tr>
+              <td colspan="5" style="color: var(--muted); padding: 20px 18px;">Loading policy corpus…</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </main>
+
+    <dialog id="doc-modal" class="modal-dialog modal-wide" aria-labelledby="modal-doc-title">
+      <div class="doc-modal-header">
+        <div class="doc-modal-top-row">
+          <div>
+            <div class="doc-modal-meta">
+              <span id="modal-doc-id" class="mono-id">POL-001</span>
+              <span id="modal-doc-format" class="format-tag">HTML</span>
+              <span id="modal-doc-cat">Leave</span>
+              <span aria-hidden="true">·</span>
+              <span id="modal-doc-chunks-count">0 chunks</span>
+            </div>
+            <h2 id="modal-doc-title" class="doc-modal-title">Loading…</h2>
+          </div>
+
+          <div class="doc-modal-actions">
+            <button id="ask-policy-btn" class="btn-dark" type="button">Ask about this policy</button>
+            <button id="close-doc-modal" class="btn-icon" type="button" aria-label="Close modal">×</button>
+          </div>
+        </div>
+
+        <div class="doc-modal-tabs" role="tablist" aria-label="Document view mode">
+          <button id="tab-btn-document" class="doc-tab-btn active" data-doc-tab="document" role="tab" aria-selected="true" type="button">
+            Document
+          </button>
+          <button id="tab-btn-chunks" class="doc-tab-btn" data-doc-tab="chunks" role="tab" aria-selected="false" type="button">
+            Chunks <span id="modal-tab-chunk-count">0</span>
+          </button>
+        </div>
+      </div>
+
+      <div id="doc-modal-body" class="doc-modal-body">
+        <div id="tab-panel-document">
+          <div class="doc-reader-grid">
+            <aside class="doc-toc" aria-label="Document sections">
+              <div class="doc-toc-label">Sections</div>
+              <ul id="doc-toc-list" class="doc-toc-list"></ul>
+            </aside>
+            <div id="doc-sections-container" class="doc-sections"></div>
+          </div>
+        </div>
+
+        <div id="tab-panel-chunks" hidden>
+          <p id="chunks-lead" class="chunks-lead">
+            Chunks exactly as they are indexed and retrieved. Split on section headings for HTML and Markdown, by page region for PDF and Text.
+          </p>
+          <div id="chunk-cards-stack" class="chunk-cards-stack"></div>
+        </div>
+      </div>
+    </dialog>
+
+    <script src="/static/corpus.js"></script>
+  </body>
+</html>

@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 import json
 import logging
 from pathlib import Path
+import sqlite3
 import threading
 from typing import Any, Literal
 
@@ -19,7 +20,7 @@ from agent.compliance import MockHRDataStore
 from agent.orchestrator import AgentOrchestrator
 from app_config import PROJECT_ROOT, get_settings
 from mcp_server.client import MCPClientManager
-from rag.ingest import build_index
+from rag.ingest import build_index, parse_policy_file
 
 logger = logging.getLogger(__name__)
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -182,6 +183,155 @@ async def serve_index() -> FileResponse:
 async def serve_architecture() -> FileResponse:
     """Serve the live system architecture, CI/CD, and evaluation walkthrough page."""
     return FileResponse(STATIC_DIR / "architecture.html")
+
+
+@app.get("/corpus", include_in_schema=False)
+async def serve_corpus() -> FileResponse:
+    """Serve the browsable policy corpus and indexed chunks inspector page."""
+    return FileResponse(STATIC_DIR / "corpus.html")
+
+
+_CATEGORY_LABELS: dict[str, str] = {
+    "pto_holidays": "Leave",
+    "remote_work": "Workplace",
+    "expenses": "Finance",
+    "security": "Security",
+    "benefits": "Benefits",
+    "onboarding": "Workforce",
+    "equipment": "IT",
+    "leave": "Leave",
+    "conduct": "Compliance",
+}
+
+
+def _humanize_category(raw: str) -> str:
+    return _CATEGORY_LABELS.get(raw.lower(), raw.replace("_", " ").title())
+
+
+def _clean_doc_title(doc_id: str, raw_title: str) -> str:
+    # Make extracted PDF filenames (e.g. "05 Information Security...") readable
+    cleaned = raw_title.strip()
+    if len(cleaned) > 3 and cleaned[:2].isdigit() and cleaned[2] == " ":
+        cleaned = cleaned[3:]
+    return cleaned
+
+
+@app.get("/api/corpus")
+async def list_corpus_documents() -> dict[str, Any]:
+    """Return metadata, format breakdown, and chunk counts for all indexed policies."""
+    settings = app.state.settings
+    manifest = app.state.rag_manifest
+    docs = manifest.get("documents", [])
+    format_counts: dict[str, int] = {"html": 0, "pdf": 0, "markdown": 0, "txt": 0}
+    enriched: list[dict[str, Any]] = []
+    for doc in docs:
+        fmt = str(doc.get("file_format", "")).lower()
+        if fmt in format_counts:
+            format_counts[fmt] += 1
+        doc_id = str(doc.get("doc_id", "")).upper()
+        enriched.append(
+            {
+                "doc_id": doc_id,
+                "doc_title": _clean_doc_title(doc_id, str(doc.get("doc_title", ""))),
+                "source_file": doc.get("source_file", ""),
+                "file_format": fmt,
+                "category": doc.get("category", ""),
+                "category_label": _humanize_category(str(doc.get("category", ""))),
+                "chunks": int(doc.get("chunks", 0)),
+            }
+        )
+    return {
+        "doc_count": manifest.get("doc_count", len(enriched)),
+        "chunk_count": manifest.get("chunk_count", sum(d["chunks"] for d in enriched)),
+        "embedding_provider": manifest.get("embedding_provider", "hash"),
+        "embedding_model": manifest.get("embedding_model", "signed-ngram-hash"),
+        "chunk_size_words": manifest.get("chunk_size_words", settings.chunk_size_words),
+        "chunk_overlap_words": manifest.get("chunk_overlap_words", settings.chunk_overlap_words),
+        "format_counts": format_counts,
+        "documents": enriched,
+    }
+
+
+@app.get("/api/corpus/{doc_id}")
+async def get_corpus_document(doc_id: str) -> dict[str, Any]:
+    """Return full readable policy sections and exact indexed chunks for one Document ID."""
+    settings = app.state.settings
+    manifest = app.state.rag_manifest
+    target_id = doc_id.strip().upper()
+    doc_meta = next(
+        (d for d in manifest.get("documents", []) if str(d.get("doc_id", "")).upper() == target_id),
+        None,
+    )
+    if doc_meta is None:
+        raise HTTPException(status_code=404, detail=f"Policy '{doc_id}' was not found.")
+
+    db_path = settings.rag_index_dir / "chunks.db"
+    chunks: list[dict[str, Any]] = []
+    if db_path.exists():
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        try:
+            rows = conn.execute(
+                """
+                SELECT chunk_idx, chunk_id, section_path, page_or_anchor, word_count, text
+                FROM chunks
+                WHERE UPPER(doc_id) = ?
+                ORDER BY chunk_idx ASC
+                """,
+                (target_id,),
+            ).fetchall()
+            chunks = [
+                {
+                    "index": idx,
+                    "chunk_idx": int(r["chunk_idx"]),
+                    "chunk_id": r["chunk_id"],
+                    "section_path": r["section_path"],
+                    "page_or_anchor": r["page_or_anchor"],
+                    "word_count": int(r["word_count"]),
+                    "text": r["text"],
+                }
+                for idx, r in enumerate(rows, start=1)
+            ]
+        finally:
+            conn.close()
+
+    sections_out: list[dict[str, Any]] = []
+    source_file = str(doc_meta.get("source_file", ""))
+    policy_path = settings.policies_dir / Path(source_file).name
+    if policy_path.exists():
+        _, parsed_sections = parse_policy_file(policy_path)
+        for idx, sec in enumerate(parsed_sections, start=1):
+            sections_out.append(
+                {
+                    "id": f"sec-{idx}",
+                    "section_path": sec.section_path,
+                    "page_or_anchor": sec.page_or_anchor,
+                    "text": sec.text,
+                }
+            )
+    else:
+        for idx, ch in enumerate(chunks, start=1):
+            sections_out.append(
+                {
+                    "id": f"sec-{idx}",
+                    "section_path": ch["section_path"],
+                    "page_or_anchor": ch["page_or_anchor"],
+                    "text": ch["text"],
+                }
+            )
+
+    fmt = str(doc_meta.get("file_format", "")).lower()
+    return {
+        "doc_id": target_id,
+        "doc_title": _clean_doc_title(target_id, str(doc_meta.get("doc_title", ""))),
+        "source_file": source_file,
+        "file_format": fmt,
+        "category": doc_meta.get("category", ""),
+        "category_label": _humanize_category(str(doc_meta.get("category", ""))),
+        "chunk_count": len(chunks) or int(doc_meta.get("chunks", 0)),
+        "sections": sections_out,
+        "chunks": chunks,
+    }
 
 
 @app.get("/health")

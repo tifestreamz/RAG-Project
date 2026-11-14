@@ -1,465 +1,670 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>System Architecture &amp; Evaluation &mdash; Northstar HR Copilot</title>
-  <link rel="stylesheet" href="/static/styles.css">
-</head>
-<body>
-  <a class="skip-link" href="#arch-main">Skip to architecture walkthrough</a>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Architecture &amp; evaluation — Northstar HR Policy Copilot</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to main content</a>
 
-  <header class="top-header">
-    <div class="header-inner">
-      <div class="brand">
-        <span class="brand-badge" aria-hidden="true">NS</span>
-        <div>
-          <h1>Northstar HR Policy &amp; Operations Copilot</h1>
-          <p class="subtitle">System Architecture, Hybrid RAG Pipeline, MCP Tools &amp; Evaluation Walkthrough</p>
+    <header class="top-nav">
+      <div class="nav-inner">
+        <div class="nav-left">
+          <a class="brand" href="/">
+            <span class="brand-mark" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M8 1L9.75 6.25L15 8L9.75 9.75L8 15L6.25 9.75L1 8L6.25 6.25L8 1Z"/>
+              </svg>
+            </span>
+            <span>
+              <span class="brand-title">Northstar</span><span class="brand-sub">HR Policy Copilot</span>
+            </span>
+          </a>
+          <nav class="nav-links" aria-label="Primary navigation">
+            <a class="nav-link" href="/">Copilot</a>
+            <a class="nav-link" href="/corpus">Policy corpus</a>
+            <a class="nav-link active" href="/architecture" aria-current="page">Architecture &amp; eval</a>
+          </nav>
+        </div>
+
+        <div class="nav-right">
+          <a id="nav-corpus-link" class="nav-stat-link" href="/corpus" title="Browse policy documents &amp; chunks">
+            <span id="nav-status-dot" class="status-dot"></span>
+            <span id="nav-corpus-text"><strong>12</strong> docs · <strong>117</strong> chunks</span>
+          </a>
+          <span class="nav-sep" aria-hidden="true"></span>
+          <span id="nav-mcp-stat" class="nav-stat">MCP stdio · <strong>8 tools</strong></span>
+          <span class="nav-sep" aria-hidden="true"></span>
+          <span id="nav-model-stat" class="nav-stat">Model · <strong>Gemini</strong></span>
+          <a class="api-docs-btn" href="/docs" target="_blank" rel="noopener">API docs ↗</a>
         </div>
       </div>
-      <div class="status-pills" aria-label="System runtime status and navigation">
-        <span id="health-pill" class="pill pill-loading">Checking live system&hellip;</span>
-        <span id="mcp-pill" class="pill pill-neutral">MCP: connecting</span>
-        <span id="llm-pill" class="pill pill-neutral">Mode: auto</span>
-        <a class="header-link" href="/">HR Copilot UI</a>
-        <a class="header-link active" href="/architecture" aria-current="page">Architecture &amp; Eval</a>
-        <a class="header-link" href="/docs" target="_blank" rel="noopener noreferrer">API Docs</a>
-      </div>
-    </div>
-  </header>
+    </header>
 
-  <main id="arch-main" class="arch-shell" tabindex="-1">
-    <!-- Executive KPI Overview -->
-    <section class="kpi-grid" aria-label="Architecture and evaluation summary">
-      <div class="kpi-card">
-        <div class="kpi-label">Multi-Format Policy Corpus</div>
-        <div class="kpi-value">12 Docs &bull; 117 Chunks</div>
-        <div class="kpi-sub"><code>POL-001</code>&ndash;<code>POL-012</code> across <code>.md</code>, <code>.html</code>, <code>.pdf</code>, <code>.txt</code></div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Hybrid Vector + Lexical RAG</div>
-        <div class="kpi-value">FAISS + BM25 + RRF</div>
-        <div class="kpi-sub">768-dim <code>gemini-embedding-001</code> (+ hash fallback) &amp; SQLite <code>chunks.db</code></div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Agent &amp; MCP Integration</div>
-        <div class="kpi-value">8 MCP Tools (stdio)</div>
-        <div class="kpi-sub"><code>gemini-3.5-flash-lite</code> + custom <code>AgentOrchestrator</code> + safety gates</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">28-Case Benchmark &amp; CI</div>
-        <div class="kpi-value">100% Pass &bull; 0 Leaks</div>
-        <div class="kpi-sub"><code>100%</code> groundedness &amp; tool selection, <code>0</code> unconfirmed writes, <code>9/9</code> pytest</div>
-      </div>
-    </section>
-
-    <!-- Diagram 1: High-Level System & Render Free-Tier Container -->
-    <section class="panel-card" aria-labelledby="sys-arch-heading">
-      <div class="card-header-row">
-        <h2 id="sys-arch-heading">1. System &amp; Render Free-Tier Architecture</h2>
-        <span class="pill pill-ok">Single Container &bull; &le; 512 MB RAM</span>
-      </div>
-      <p class="muted-text">
-        Clean separation between the accessible FastAPI web tier, input/output guardrails, async orchestrator,
-        JSON-RPC <code>stdio</code> Model Context Protocol layer, Hybrid RAG vector/BM25 retrieval, and synthetic HR stores.
-      </p>
-      <div class="diagram-scroll">
-        <svg class="arch-svg" viewBox="0 0 1120 490" role="img" aria-label="High-level system architecture diagram showing browser, FastAPI, Guardrails, AgentOrchestrator, MCPClientManager, MCPServer, HybridPolicyRetriever, MockHRDataStore, and Google Gemini APIs">
-          <defs>
-            <marker id="arrow-arch" markerWidth="10" markerHeight="10" refX="8" refY="3.5" orient="auto">
-              <polygon points="0 0, 9 3.5, 0 7" fill="#334155" />
-            </marker>
-            <marker id="arrow-arch-start" markerWidth="10" markerHeight="10" refX="1" refY="3.5" orient="auto">
-              <polygon points="9 0, 0 3.5, 9 7" fill="#334155" />
-            </marker>
-          </defs>
-
-          <!-- Render Container Frame -->
-          <rect x="250" y="14" width="585" height="464" rx="12" fill="#f8fafc" stroke="#94a3b8" stroke-width="2" stroke-dasharray="8 5" />
-          <text x="268" y="39" font-size="13" font-weight="700" fill="#334155">Single Render Free-Tier Docker Container (&le; 512 MB RAM &mdash; No PyTorch)</text>
-
-          <!-- External Users (Left) -->
-          <rect x="18" y="64" width="192" height="68" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.8" />
-          <text x="114" y="92" text-anchor="middle" font-size="13" font-weight="700" fill="#1e3a8a">Browser UI &amp; Presenter</text>
-          <text x="114" y="113" text-anchor="middle" font-size="11.5" fill="#1e40af">/, /architecture, /docs</text>
-
-          <rect x="18" y="160" width="192" height="62" rx="8" fill="#ffffff" stroke="#64748b" stroke-width="1.5" />
-          <text x="114" y="186" text-anchor="middle" font-size="12.5" font-weight="700" fill="#0f172a">curl / Automated Tests</text>
-          <text x="114" y="206" text-anchor="middle" font-size="11.5" fill="#475569">POST /chat, /confirm, GET /health</text>
-
-          <line x1="210" y1="98" x2="268" y2="98" stroke="#334155" stroke-width="1.8" marker-end="url(#arrow-arch)" />
-          <polyline points="210,191 236,191 236,114 268,114" fill="none" stroke="#334155" stroke-width="1.6" marker-end="url(#arrow-arch)" />
-
-          <!-- Container Row 1 -->
-          <rect x="270" y="64" width="160" height="68" rx="8" fill="#0f172a" />
-          <text x="350" y="91" text-anchor="middle" font-size="13" font-weight="700" fill="#ffffff">FastAPI Server</text>
-          <text x="350" y="111" text-anchor="middle" font-size="11.5" fill="#cbd5e1">web/app.py (REST + SPA)</text>
-
-          <line x1="430" y1="98" x2="453" y2="98" stroke="#334155" stroke-width="1.8" marker-end="url(#arrow-arch)" />
-
-          <rect x="455" y="64" width="160" height="68" rx="8" fill="#fffbeb" stroke="#d97706" stroke-width="1.6" />
-          <text x="535" y="90" text-anchor="middle" font-size="13" font-weight="700" fill="#92400e">Input Guardrails</text>
-          <text x="535" y="110" text-anchor="middle" font-size="11" fill="#78350f">Injection, Clarity &amp; P1 Flag</text>
-
-          <line x1="615" y1="98" x2="638" y2="98" stroke="#334155" stroke-width="1.8" marker-end="url(#arrow-arch)" />
-
-          <rect x="640" y="64" width="175" height="68" rx="8" fill="#1d4ed8" />
-          <text x="727" y="89" text-anchor="middle" font-size="13" font-weight="700" fill="#ffffff">AgentOrchestrator</text>
-          <text x="727" y="108" text-anchor="middle" font-size="11" fill="#dbeafe">No Hidden CoT &bull; Confirm Gate</text>
-
-          <!-- Vertical Orchestrator <-> MCPClient -->
-          <line x1="727" y1="134" x2="727" y2="190" stroke="#334155" stroke-width="1.8" marker-start="url(#arrow-arch-start)" marker-end="url(#arrow-arch)" />
-
-          <!-- Container Row 2: MCP Layer -->
-          <rect x="270" y="192" width="235" height="70" rx="8" fill="#065f46" />
-          <text x="387" y="219" text-anchor="middle" font-size="13" font-weight="700" fill="#ffffff">MCPServer (northstar-hr-mcp)</text>
-          <text x="387" y="239" text-anchor="middle" font-size="11.5" fill="#d1fae5">mcp_server/server.py &bull; 8 Tools</text>
-
-          <line x1="507" y1="227" x2="638" y2="227" stroke="#334155" stroke-width="2" marker-start="url(#arrow-arch-start)" marker-end="url(#arrow-arch)" />
-          <text x="572" y="215" text-anchor="middle" font-size="11.5" font-weight="700" fill="#065f46">stdio JSON-RPC</text>
-          <text x="572" y="246" text-anchor="middle" font-size="10.5" fill="#475569">list_tools / call_tool</text>
-
-          <rect x="640" y="192" width="175" height="70" rx="8" fill="#ecfdf5" stroke="#059669" stroke-width="1.8" />
-          <text x="727" y="219" text-anchor="middle" font-size="13" font-weight="700" fill="#065f46">MCPClientManager</text>
-          <text x="727" y="239" text-anchor="middle" font-size="11.5" fill="#047857">mcp_server/client.py</text>
-
-          <!-- Container Row 3: Data & RAG Engines -->
-          <rect x="270" y="325" width="255" height="86" rx="8" fill="#ffffff" stroke="#2563eb" stroke-width="1.8" />
-          <text x="397" y="352" text-anchor="middle" font-size="13" font-weight="700" fill="#1e3a8a">HybridPolicyRetriever (RAG)</text>
-          <text x="397" y="372" text-anchor="middle" font-size="11.5" fill="#334155">FAISS IndexFlatIP + BM25Okapi + RRF</text>
-          <text x="397" y="391" text-anchor="middle" font-size="11" fill="#475569">SQLite chunks.db &bull; 12 Policies (117 chunks)</text>
-
-          <rect x="560" y="325" width="255" height="86" rx="8" fill="#ffffff" stroke="#059669" stroke-width="1.8" />
-          <text x="687" y="352" text-anchor="middle" font-size="13" font-weight="700" fill="#065f46">MockHRDataStore &amp; Rules</text>
-          <text x="687" y="372" text-anchor="middle" font-size="11.5" fill="#334155">employees, pto_balances, benefits, tickets</text>
-          <text x="687" y="391" text-anchor="middle" font-size="11" fill="#475569">Compliance Engine &bull; Draft Email &bull; is_mock Gate</text>
-
-          <!-- MCPServer -> Retriever & DataStore -->
-          <line x1="387" y1="262" x2="387" y2="323" stroke="#334155" stroke-width="1.8" marker-end="url(#arrow-arch)" />
-          <polyline points="445,262 445,293 687,293 687,323" fill="none" stroke="#334155" stroke-width="1.8" marker-end="url(#arrow-arch)" />
-
-          <!-- External Google Cloud APIs (Right) -->
-          <rect x="865" y="60" width="235" height="78" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="1.8" />
-          <text x="982" y="87" text-anchor="middle" font-size="13" font-weight="700" fill="#92400e">Google Gemini LLM</text>
-          <text x="982" y="107" text-anchor="middle" font-size="11.5" fill="#78350f">gemini-3.5-flash-lite (Interactions API)</text>
-          <text x="982" y="125" text-anchor="middle" font-size="10.5" fill="#92400e">+ Deterministic Mock Fallback</text>
-
-          <line x1="817" y1="98" x2="863" y2="98" stroke="#334155" stroke-width="1.8" marker-start="url(#arrow-arch-start)" marker-end="url(#arrow-arch)" />
-
-          <rect x="865" y="325" width="235" height="86" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="1.8" />
-          <text x="982" y="352" text-anchor="middle" font-size="13" font-weight="700" fill="#92400e">Google Embeddings API</text>
-          <text x="982" y="372" text-anchor="middle" font-size="11.5" fill="#78350f">gemini-embedding-001 (768-dim)</text>
-          <text x="982" y="391" text-anchor="middle" font-size="10.5" fill="#92400e">100/min paced + Signed Hash Boot</text>
-
-          <polyline points="397,413 397,448 982,448 982,413" fill="none" stroke="#334155" stroke-width="1.8" marker-start="url(#arrow-arch-start)" marker-end="url(#arrow-arch)" />
-          <rect x="592" y="436" width="196" height="20" rx="4" fill="#f8fafc" />
-          <text x="690" y="450" text-anchor="middle" font-size="11" font-weight="600" fill="#475569">Document &amp; Query Embeddings</text>
-        </svg>
-      </div>
-    </section>
-
-    <!-- Diagram 2: Hybrid RAG Pipeline -->
-    <section class="panel-card" aria-labelledby="rag-arch-heading">
-      <div class="card-header-row">
-        <h2 id="rag-arch-heading">2. Hybrid RAG Ingestion &amp; Query Pipeline</h2>
-        <span class="pill pill-neutral">Top-k = 5 &bull; RRF (k=60)</span>
-      </div>
-      <p class="muted-text">
-        Heading-aware ingestion across four file formats feeds parallel dense vector search (FAISS cosine) and sparse BM25 lexical scoring,
-        protected by a Zero-Match RRF pollution gate and sentence-level snippet extraction.
-      </p>
-      <div class="diagram-scroll">
-        <svg class="arch-svg" viewBox="0 0 1120 315" role="img" aria-label="Hybrid RAG ingestion and retrieval pipeline diagram">
-          <defs>
-            <marker id="arrow-rag" markerWidth="10" markerHeight="10" refX="8" refY="3.5" orient="auto">
-              <polygon points="0 0, 9 3.5, 0 7" fill="#1e40af" />
-            </marker>
-            <marker id="arrow-rag-dark" markerWidth="10" markerHeight="10" refX="8" refY="3.5" orient="auto">
-              <polygon points="0 0, 9 3.5, 0 7" fill="#065f46" />
-            </marker>
-          </defs>
-
-          <!-- Swimlane 1: Ingestion -->
-          <text x="18" y="25" font-size="12.5" font-weight="700" fill="#1e3a8a">A. Build-Time &amp; Background Indexing (rag/ingest.py &bull; RANDOM_SEED=42)</text>
-
-          <rect x="18" y="40" width="192" height="76" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.6" />
-          <text x="114" y="67" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1e3a8a">12 Policy Documents</text>
-          <text x="114" y="86" text-anchor="middle" font-size="11" fill="#334155">.md, .html, .pdf, .txt</text>
-          <text x="114" y="102" text-anchor="middle" font-size="10.5" fill="#475569">8,907 words (~34.6 pages)</text>
-
-          <line x1="210" y1="78" x2="236" y2="78" stroke="#1e40af" stroke-width="1.8" marker-end="url(#arrow-rag)" />
-
-          <rect x="238" y="40" width="192" height="76" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.6" />
-          <text x="334" y="67" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1e3a8a">Parse &amp; Chunk</text>
-          <text x="334" y="86" text-anchor="middle" font-size="11" fill="#334155">Heading-aware splitter</text>
-          <text x="334" y="102" text-anchor="middle" font-size="10.5" fill="#475569">350w / 60w overlap &rarr; 117 chunks</text>
-
-          <line x1="430" y1="78" x2="456" y2="78" stroke="#1e40af" stroke-width="1.8" marker-end="url(#arrow-rag)" />
-
-          <rect x="458" y="40" width="192" height="76" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.6" />
-          <text x="554" y="67" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1e3a8a">Dual Embedding</text>
-          <text x="554" y="86" text-anchor="middle" font-size="11" fill="#334155">gemini-embedding-001 (L2)</text>
-          <text x="554" y="102" text-anchor="middle" font-size="10.5" fill="#475569">+ Stopword BM25 tokens</text>
-
-          <line x1="650" y1="78" x2="676" y2="78" stroke="#1e40af" stroke-width="1.8" marker-end="url(#arrow-rag)" />
-
-          <rect x="678" y="40" width="192" height="76" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.6" />
-          <text x="774" y="67" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1e3a8a">Vector &amp; Meta Store</text>
-          <text x="774" y="86" text-anchor="middle" font-size="11" fill="#334155">FAISS IndexFlatIP (768-d)</text>
-          <text x="774" y="102" text-anchor="middle" font-size="10.5" fill="#475569">+ SQLite chunks.db</text>
-
-          <line x1="870" y1="78" x2="896" y2="78" stroke="#1e40af" stroke-width="1.8" marker-end="url(#arrow-rag)" />
-
-          <rect x="898" y="40" width="196" height="76" rx="8" fill="#0f172a" />
-          <text x="996" y="67" text-anchor="middle" font-size="12.5" font-weight="700" fill="#ffffff">Zero-Downtime Boot</text>
-          <text x="996" y="86" text-anchor="middle" font-size="11" fill="#cbd5e1">Hash index baked in image</text>
-          <text x="996" y="102" text-anchor="middle" font-size="10.5" fill="#93c5fd">Atomic Gemini upgrade on boot</text>
-
-          <line x1="18" y1="145" x2="1094" y2="145" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="6 4" />
-
-          <!-- Swimlane 2: Online Retrieval -->
-          <text x="18" y="175" font-size="12.5" font-weight="700" fill="#065f46">B. Online Query, Hybrid Fusion &amp; Guarded Citations (rag/retriever.py)</text>
-
-          <rect x="18" y="192" width="192" height="84" rx="8" fill="#ecfdf5" stroke="#059669" stroke-width="1.6" />
-          <text x="114" y="218" text-anchor="middle" font-size="12.5" font-weight="700" fill="#065f46">MCP Retrieval Call</text>
-          <text x="114" y="238" text-anchor="middle" font-size="11" fill="#334155">search_policy_documents</text>
-          <text x="114" y="256" text-anchor="middle" font-size="10.5" fill="#475569">query, top_k=5, category, doc_id</text>
-
-          <line x1="210" y1="234" x2="236" y2="234" stroke="#065f46" stroke-width="1.8" marker-end="url(#arrow-rag-dark)" />
-
-          <rect x="238" y="192" width="192" height="84" rx="8" fill="#ecfdf5" stroke="#059669" stroke-width="1.6" />
-          <text x="334" y="218" text-anchor="middle" font-size="12.5" font-weight="700" fill="#065f46">Expand &amp; Embed Query</text>
-          <text x="334" y="238" text-anchor="middle" font-size="11" fill="#334155">HR domain synonym expand</text>
-          <text x="334" y="256" text-anchor="middle" font-size="10.5" fill="#475569">+ RETRIEVAL_QUERY vector</text>
-
-          <line x1="430" y1="234" x2="456" y2="234" stroke="#065f46" stroke-width="1.8" marker-end="url(#arrow-rag-dark)" />
-
-          <rect x="458" y="192" width="192" height="84" rx="8" fill="#ecfdf5" stroke="#059669" stroke-width="1.6" />
-          <text x="554" y="218" text-anchor="middle" font-size="12.5" font-weight="700" fill="#065f46">Hybrid RRF Fusion</text>
-          <text x="554" y="238" text-anchor="middle" font-size="11" fill="#334155">Positive FAISS + BM25 only</text>
-          <text x="554" y="256" text-anchor="middle" font-size="10.5" fill="#475569">RRF (k=60) + Exact POL-ID boost</text>
-
-          <line x1="650" y1="234" x2="676" y2="234" stroke="#065f46" stroke-width="1.8" marker-end="url(#arrow-rag-dark)" />
-
-          <rect x="678" y="192" width="192" height="84" rx="8" fill="#fffbeb" stroke="#d97706" stroke-width="1.6" />
-          <text x="774" y="218" text-anchor="middle" font-size="12.5" font-weight="700" fill="#92400e">Threshold Safety Gate</text>
-          <text x="774" y="238" text-anchor="middle" font-size="11" fill="#78350f">RRF&ge;0.008 &amp; floor check</text>
-          <text x="774" y="256" text-anchor="middle" font-size="10.5" fill="#92400e">Abstains on out-of-domain</text>
-
-          <line x1="870" y1="234" x2="896" y2="234" stroke="#065f46" stroke-width="1.8" marker-end="url(#arrow-rag-dark)" />
-
-          <rect x="898" y="192" width="196" height="84" rx="8" fill="#065f46" />
-          <text x="996" y="218" text-anchor="middle" font-size="12.5" font-weight="700" fill="#ffffff">Cited Output</text>
-          <text x="996" y="238" text-anchor="middle" font-size="11" fill="#d1fae5">Ranked sentence snippets</text>
-          <text x="996" y="256" text-anchor="middle" font-size="10.5" fill="#a7f3d0">Facts vs. Recommendations</text>
-        </svg>
-      </div>
-    </section>
-
-    <!-- Section 3: MCP Tools & Two Required Agentic Demo Walkthroughs -->
-    <div class="arch-grid-2">
-      <section class="panel-card" aria-labelledby="mcp-tools-heading">
-        <div class="card-header-row">
-          <h2 id="mcp-tools-heading">3. MCP Server (<code>northstar-hr-mcp</code>) &amp; 8 Tools</h2>
-          <span class="pill pill-ok">MCP v2.3.0 &bull; stdio</span>
-        </div>
-        <p class="muted-text">
-          Registered on <code>mcp.server.mcpserver.MCPServer</code> and discovered at startup via <code>ClientSession.list_tools()</code>:
+    <main id="main-content" class="arch-shell">
+      <div>
+        <h1 class="page-title">Architecture &amp; evaluation</h1>
+        <p class="page-subtitle">
+          How queries move from browser through FastAPI, hybrid RAG, MCP stdio tools, and Gemini 3.5 Flash-Lite, plus CI verification &amp; ablation results.
         </p>
-        <h3>Policy Evidence Tools (Hybrid RAG)</h3>
-        <div class="tool-chips">
-          <span class="tool-chip tool-chip-rag">search_policy_documents</span>
-          <span class="tool-chip tool-chip-rag">get_policy_section</span>
-        </div>
-        <h3>Structured HR &amp; Safety-Gated Action Tools</h3>
-        <div class="tool-chips">
-          <span class="tool-chip tool-chip-hr">lookup_employee_profile</span>
-          <span class="tool-chip tool-chip-hr">check_pto_balance</span>
-          <span class="tool-chip tool-chip-hr">lookup_benefits_status</span>
-          <span class="tool-chip tool-chip-hr">check_policy_compliance</span>
-          <span class="tool-chip tool-chip-hr">draft_hr_email</span>
-          <span class="tool-chip tool-chip-hr">create_mock_hr_ticket</span>
-        </div>
-        <ul class="arch-list">
-          <li><strong>No Hardcoded Direct Functions:</strong> Every tool call routes through JSON-RPC <code>ClientSession.call_tool()</code>.</li>
-          <li><strong>Zero Thought Leaks:</strong> Operational trace exposes tool names, arguments, summaries, citations, and timing only.</li>
-          <li><strong>Human Confirmation Gate:</strong> <code>confirmed=False</code> forced during chat; persistence requires <code>POST /confirm</code> via modal dialog.</li>
-        </ul>
-      </section>
 
-      <section class="panel-card" aria-labelledby="demo-flows-heading">
-        <div class="card-header-row">
-          <h2 id="demo-flows-heading">4. Two Agentic Demo Workflows (Live Trace Map)</h2>
-          <a class="pill pill-loading" href="/" style="text-decoration:none;">Open Copilot UI &rarr;</a>
-        </div>
-        <ul class="arch-list">
-          <li>
-            <strong>Demo Task 1 &mdash; Maya Lin (<code>EMP-1042</code>) International Workcation Conflict:</strong>
-            Calls <code>lookup_employee_profile</code> (Standard-Corp, FTE), <code>check_pto_balance</code> (5 rolling intl days used),
-            <code>search_policy_documents</code> (<code>POL-003</code> 30-day cap + <code>POL-005</code> travel security),
-            <code>check_policy_compliance</code> (42 + 5 = 47 &gt; 30 &rarr; <strong>P2 NON_COMPLIANT</strong>),
-            <code>draft_hr_email</code>, and <code>create_mock_hr_ticket(confirmed=False)</code>.
-          </li>
-          <li>
-            <strong>Demo Task 2 &mdash; Carlos Vega (<code>EMP-1018</code>) Year-End PTO &amp; Winter Recharge:</strong>
-            Verifies <code>7.5</code> PTO days available, distinguishes <code>POL-002</code> Winter Recharge (Dec 26&ndash;31 non-deduction) from SRE blackout,
-            evaluates <strong>CONDITIONAL_APPROVAL (P3)</strong>, stages mock ticket in <code>UNCONFIRMED PREVIEW</code>, and persists <code>is_mock: true</code>
-            only after clicking <strong>Confirm &amp; Create Mock HR Ticket</strong> (<code>POST /confirm</code>).
-          </li>
-        </ul>
-      </section>
-    </div>
-
-    <!-- Section 5: CI/CD & Render Deployment -->
-    <section class="panel-card" aria-labelledby="cicd-heading">
-      <div class="card-header-row">
-        <h2 id="cicd-heading">5. GitHub Actions CI/CD Gate &amp; Render Deployment</h2>
-        <span class="pill pill-ok">.github/workflows/ci.yml &bull; Dockerfile &bull; render.yaml</span>
+        <nav class="jump-pills" aria-label="Section shortcuts">
+          <a class="jump-pill" href="#sec-system"><span>01</span> System</a>
+          <a class="jump-pill" href="#sec-pipeline"><span>02</span> RAG pipeline</a>
+          <a class="jump-pill" href="#sec-tools"><span>03</span> MCP tools</a>
+          <a class="jump-pill" href="#sec-workflows"><span>04</span> Demo workflows</a>
+          <a class="jump-pill" href="#sec-deploy"><span>05</span> CI/CD &amp; deploy</a>
+          <a class="jump-pill" href="#sec-eval"><span>06</span> Evaluation</a>
+          <a class="jump-pill" href="#sec-ablations"><span>07</span> Ablations</a>
+        </nav>
       </div>
-      <div class="diagram-scroll" style="margin-bottom:12px;">
-        <svg class="arch-svg" viewBox="0 0 1120 132" role="img" aria-label="GitHub Actions CI/CD to Render deployment pipeline diagram">
-          <defs>
-            <marker id="arrow-ci" markerWidth="10" markerHeight="10" refX="8" refY="3.5" orient="auto">
-              <polygon points="0 0, 9 3.5, 0 7" fill="#334155" />
-            </marker>
-          </defs>
 
-          <rect x="18" y="24" width="192" height="80" rx="8" fill="#0f172a" />
-          <text x="114" y="53" text-anchor="middle" font-size="12.5" font-weight="700" fill="#ffffff">1. Push / PR (main)</text>
-          <text x="114" y="73" text-anchor="middle" font-size="11" fill="#cbd5e1">tifestreamz/RAG-Project</text>
-          <text x="114" y="91" text-anchor="middle" font-size="10.5" fill="#93c5fd">GitHub Actions Trigger</text>
+      <section class="arch-kpi-strip" aria-label="Key system metrics">
+        <div class="arch-kpi-cell">
+          <div class="arch-kpi-label">Corpus indexed</div>
+          <div id="kpi-corpus-val" class="arch-kpi-val">12 docs · 117 chunks</div>
+          <div class="arch-kpi-sub">8,907 words · HTML, PDF, MD, TXT</div>
+        </div>
+        <div class="arch-kpi-cell">
+          <div class="arch-kpi-label">Hybrid retrieval</div>
+          <div class="arch-kpi-val">FAISS + BM25 + RRF</div>
+          <div class="arch-kpi-sub">768-dim gemini-embedding-001 · k=60</div>
+        </div>
+        <div class="arch-kpi-cell">
+          <div class="arch-kpi-label">Agentic tools</div>
+          <div id="kpi-mcp-val" class="arch-kpi-val">8 MCP tools</div>
+          <div class="arch-kpi-sub">Stdio JSON-RPC · confirmed=false gate</div>
+        </div>
+        <div class="arch-kpi-cell">
+          <div class="arch-kpi-label">28-case evaluation</div>
+          <div class="arch-kpi-val teal">100% pass · 0 leaks</div>
+          <div class="arch-kpi-sub">0.958 citation recall · 1.000 grounded</div>
+        </div>
+      </section>
 
-          <line x1="210" y1="64" x2="236" y2="64" stroke="#334155" stroke-width="1.8" marker-end="url(#arrow-ci)" />
+      <!-- 01 System Architecture -->
+      <section id="sec-system" class="arch-card">
+        <div class="arch-card-head">
+          <div>
+            <div class="arch-card-num">01</div>
+            <h2 class="arch-card-title">System architecture</h2>
+            <p class="arch-card-desc">
+              Browser requests flow through FastAPI, input guardrails, async orchestrator, and 8 MCP tools — all inside a single Render container.
+            </p>
+          </div>
+          <span class="format-tag">Render free tier · 512 MB</span>
+        </div>
 
-          <rect x="238" y="24" width="192" height="80" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.6" />
-          <text x="334" y="53" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1e3a8a">2. Build RAG Index</text>
-          <text x="334" y="73" text-anchor="middle" font-size="11" fill="#334155">rag.ingest --provider hash</text>
-          <text x="334" y="91" text-anchor="middle" font-size="10.5" fill="#475569">Offline reproducible CI build</text>
+        <div class="diagram-frame">
+          <svg class="arch-svg" viewBox="0 0 980 286" role="img" aria-label="Northstar HR Policy Copilot system architecture diagram">
+            <defs>
+              <marker id="arrow-muted" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+                <path d="M0,0.5 L6.5,3.5 L0,6.5 Z" fill="#9c998f"/>
+              </marker>
+              <marker id="arrow-teal" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+                <path d="M0,0.5 L6.5,3.5 L0,6.5 Z" fill="#0f6f63"/>
+              </marker>
+              <marker id="arrow-amber" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+                <path d="M0,0.5 L6.5,3.5 L0,6.5 Z" fill="#d97706"/>
+              </marker>
+            </defs>
 
-          <line x1="430" y1="64" x2="456" y2="64" stroke="#334155" stroke-width="1.8" marker-end="url(#arrow-ci)" />
+            <!-- Container frame -->
+            <rect x="200" y="14" width="554" height="258" rx="12" fill="#ffffff" stroke="#d4d1c8" stroke-dasharray="4 4"/>
+            <text x="216" y="34" font-family="Inter, sans-serif" font-size="11" font-weight="600" fill="#76746e">
+              Northstar FastAPI container · Single Render worker
+            </text>
 
-          <rect x="458" y="24" width="192" height="80" rx="8" fill="#ecfdf5" stroke="#059669" stroke-width="1.6" />
-          <text x="554" y="53" text-anchor="middle" font-size="12.5" font-weight="700" fill="#065f46">3. Pytest Suite (9/9)</text>
-          <text x="554" y="73" text-anchor="middle" font-size="11" fill="#334155">App start, /health, guardrails</text>
-          <text x="554" y="91" text-anchor="middle" font-size="10.5" fill="#047857">+ Live MCP stdio tool calls</text>
+            <!-- Connectors: Left UI -> FastAPI -->
+            <path d="M168 82 L212 82" stroke="#9c998f" stroke-width="1.3" fill="none" marker-end="url(#arrow-muted)"/>
+            <path d="M168 198 L184 198 L184 96 L212 96" stroke="#9c998f" stroke-width="1.3" fill="none" marker-end="url(#arrow-muted)"/>
 
-          <line x1="650" y1="64" x2="676" y2="64" stroke="#334155" stroke-width="1.8" marker-end="url(#arrow-ci)" />
+            <!-- Connectors: Gateway -> Guardrail -> Orchestrator -->
+            <path d="M348 82 L374 82" stroke="#9c998f" stroke-width="1.3" fill="none" marker-end="url(#arrow-muted)"/>
+            <path d="M518 82 L546 82" stroke="#9c998f" stroke-width="1.3" fill="none" marker-end="url(#arrow-muted)"/>
 
-          <rect x="678" y="24" width="192" height="80" rx="8" fill="#ecfdf5" stroke="#059669" stroke-width="1.6" />
-          <text x="774" y="53" text-anchor="middle" font-size="12.5" font-weight="700" fill="#065f46">4. Eval Regression Gate</text>
-          <text x="774" y="73" text-anchor="middle" font-size="11" fill="#334155">28-case benchmark + ablations</text>
-          <text x="774" y="91" text-anchor="middle" font-size="10.5" fill="#047857">Deploy job gated on test pass</text>
+            <!-- Orchestrator <-> Gemini LLM -->
+            <path d="M726 74 L774 74" stroke="#d97706" stroke-width="1.3" fill="none" marker-end="url(#arrow-amber)"/>
+            <path d="M774 89 L732 89" stroke="#d97706" stroke-width="1.3" stroke-dasharray="3 3" fill="none" marker-end="url(#arrow-amber)"/>
 
-          <line x1="870" y1="64" x2="896" y2="64" stroke="#334155" stroke-width="1.8" marker-end="url(#arrow-ci)" />
+            <!-- Orchestrator <-> MCP server -->
+            <path d="M622 108 L622 132" stroke="#0f6f63" stroke-width="1.4" fill="none" marker-end="url(#arrow-teal)"/>
+            <path d="M652 136 L652 114" stroke="#0f6f63" stroke-width="1.4" fill="none" marker-end="url(#arrow-teal)"/>
 
-          <rect x="898" y="24" width="196" height="80" rx="8" fill="#1d4ed8" />
-          <text x="996" y="53" text-anchor="middle" font-size="12.5" font-weight="700" fill="#ffffff">5. Render Free Tier</text>
-          <text x="996" y="73" text-anchor="middle" font-size="11" fill="#dbeafe">Docker + healthCheckPath /health</text>
-          <text x="996" y="91" text-anchor="middle" font-size="10.5" fill="#bfdbfe">Auto / RENDER_DEPLOY_HOOK_URL</text>
-        </svg>
+            <!-- MCP -> Hybrid RAG & Mock HR data -->
+            <path d="M550 162 L522 162" stroke="#0f6f63" stroke-width="1.4" fill="none" marker-end="url(#arrow-teal)"/>
+            <path d="M636 188 L636 226 L568 226" stroke="#9c998f" stroke-width="1.3" fill="none" marker-end="url(#arrow-muted)"/>
+
+            <!-- Hybrid RAG -> SQLite + FAISS -->
+            <path d="M376 162 L292 162 L292 198" stroke="#9c998f" stroke-width="1.3" fill="none" marker-end="url(#arrow-muted)"/>
+
+            <!-- Hybrid RAG / Storage <-> Gemini Embeddings -->
+            <path d="M564 238 L774 238" stroke="#d97706" stroke-width="1.3" fill="none" marker-end="url(#arrow-amber)"/>
+            <text x="688" y="252" font-family="Inter, sans-serif" font-size="10" fill="#8c5209">embed_content</text>
+
+            <!-- Left Column: Client / Assets -->
+            <rect x="16" y="54" width="152" height="56" rx="8" fill="#ffffff" stroke="#d4d1c8"/>
+            <text x="92" y="78" text-anchor="middle" font-family="Inter, sans-serif" font-size="12" font-weight="600" fill="#1b1a16">Browser UI</text>
+            <text x="92" y="95" text-anchor="middle" font-family="Inter, sans-serif" font-size="10.5" fill="#76746e">Copilot · Corpus · Arch</text>
+
+            <rect x="16" y="170" width="152" height="56" rx="8" fill="#ffffff" stroke="#d4d1c8"/>
+            <text x="92" y="194" text-anchor="middle" font-family="Inter, sans-serif" font-size="12" font-weight="600" fill="#1b1a16">Static web assets</text>
+            <text x="92" y="211" text-anchor="middle" font-family="Inter, sans-serif" font-size="10.5" fill="#76746e">index · corpus · architecture</text>
+
+            <!-- Top Row inside Container -->
+            <rect x="216" y="54" width="132" height="56" rx="8" fill="#ffffff" stroke="#d4d1c8"/>
+            <text x="282" y="78" text-anchor="middle" font-family="Inter, sans-serif" font-size="12" font-weight="600" fill="#1b1a16">FastAPI gateway</text>
+            <text x="282" y="95" text-anchor="middle" font-family="Inter, sans-serif" font-size="10.5" fill="#76746e">POST /chat · /confirm</text>
+
+            <rect x="378" y="54" width="140" height="56" rx="8" fill="#ffffff" stroke="#d4d1c8"/>
+            <text x="448" y="78" text-anchor="middle" font-family="Inter, sans-serif" font-size="12" font-weight="600" fill="#1b1a16">Input guardrail</text>
+            <text x="448" y="95" text-anchor="middle" font-family="Inter, sans-serif" font-size="10.5" fill="#76746e">Clarity + injection gate</text>
+
+            <rect x="550" y="54" width="176" height="56" rx="8" fill="#1b1a16"/>
+            <text x="638" y="78" text-anchor="middle" font-family="Inter, sans-serif" font-size="12" font-weight="600" fill="#ffffff">AgentOrchestrator</text>
+            <text x="638" y="95" text-anchor="middle" font-family="Inter, sans-serif" font-size="10.5" fill="#d4d1c8">Interactions + tool loop</text>
+
+            <!-- Middle Row inside Container -->
+            <rect x="378" y="136" width="140" height="52" rx="8" fill="#edf6f4" stroke="#c5e0db"/>
+            <text x="448" y="159" text-anchor="middle" font-family="Inter, sans-serif" font-size="12" font-weight="600" fill="#0f6f63">Hybrid RAG</text>
+            <text x="448" y="175" text-anchor="middle" font-family="Inter, sans-serif" font-size="10.5" fill="#0f6f63">FAISS + BM25 + RRF</text>
+
+            <rect x="550" y="136" width="176" height="52" rx="8" fill="#edf6f4" stroke="#c5e0db"/>
+            <text x="638" y="159" text-anchor="middle" font-family="Inter, sans-serif" font-size="12" font-weight="600" fill="#0f6f63">MCP server · 8 tools</text>
+            <text x="638" y="175" text-anchor="middle" font-family="Inter, sans-serif" font-size="10.5" fill="#0f6f63">stdio JSON-RPC · 400s</text>
+
+            <!-- Bottom Row inside Container -->
+            <rect x="216" y="202" width="154" height="52" rx="8" fill="#ffffff" stroke="#d4d1c8"/>
+            <text x="293" y="224" text-anchor="middle" font-family="Inter, sans-serif" font-size="12" font-weight="600" fill="#1b1a16">SQLite + FAISS</text>
+            <text x="293" y="240" text-anchor="middle" font-family="Inter, sans-serif" font-size="10.5" fill="#76746e">117 chunks · manifest</text>
+
+            <rect x="404" y="202" width="160" height="52" rx="8" fill="#ffffff" stroke="#d4d1c8"/>
+            <text x="484" y="224" text-anchor="middle" font-family="Inter, sans-serif" font-size="12" font-weight="600" fill="#1b1a16">Mock HR data + rules</text>
+            <text x="484" y="240" text-anchor="middle" font-family="Inter, sans-serif" font-size="10.5" fill="#76746e">Employees · compliance</text>
+
+            <!-- External APIs (Right Column) -->
+            <rect x="780" y="54" width="184" height="56" rx="8" fill="#f8f0d9" stroke="#ead39a"/>
+            <text x="872" y="78" text-anchor="middle" font-family="Inter, sans-serif" font-size="12" font-weight="600" fill="#8c5209">Google Gemini</text>
+            <text x="872" y="95" text-anchor="middle" font-family="Inter, sans-serif" font-size="10.5" fill="#8c5209">gemini-3.5-flash-lite</text>
+
+            <rect x="780" y="202" width="184" height="56" rx="8" fill="#f8f0d9" stroke="#ead39a"/>
+            <text x="872" y="225" text-anchor="middle" font-family="Inter, sans-serif" font-size="12" font-weight="600" fill="#8c5209">Gemini Embeddings</text>
+            <text x="872" y="242" text-anchor="middle" font-family="Inter, sans-serif" font-size="10.5" fill="#8c5209">gemini-embedding-001 (768d)</text>
+          </svg>
+        </div>
+
+        <div class="legend-row">
+          <span class="legend-item"><span class="legend-dot" style="background: #1b1a16;"></span>Orchestrator</span>
+          <span class="legend-item"><span class="legend-dot" style="background: #0f6f63;"></span>MCP &amp; retrieval</span>
+          <span class="legend-item"><span class="legend-dot" style="background: #ffffff; border: 1px solid #d4d1c8;"></span>Storage &amp; UI</span>
+          <span class="legend-item"><span class="legend-dot" style="background: #d97706;"></span>External API</span>
+        </div>
+      </section>
+
+      <!-- 02 Hybrid RAG pipeline -->
+      <section id="sec-pipeline" class="arch-card">
+        <div class="arch-card-head">
+          <div>
+            <div class="arch-card-num">02</div>
+            <h2 class="arch-card-title">Hybrid RAG ingestion &amp; query pipeline</h2>
+            <p class="arch-card-desc">
+              Every chunk is embedded densely with Gemini (or hash fallback offline) and indexed sparsely with BM25, fused at query time via Reciprocal Rank Fusion.
+            </p>
+          </div>
+          <span class="format-tag">FAISS + BM25 + RRF</span>
+        </div>
+
+        <div class="pipeline-lane-label">
+          A. Build &amp; background indexing · Dockerfile prebuilds hash index, Gemini upgrades in background
+        </div>
+        <div class="step-grid-5">
+          <div class="step-box">
+            <div class="step-kicker">STEP 01</div>
+            <div class="step-title">12 Policy Docs</div>
+            <div class="step-sub">4 formats (HTML, PDF, MD, TXT) · 8,907 words</div>
+          </div>
+          <div class="step-box">
+            <div class="step-kicker">STEP 02</div>
+            <div class="step-title">Format Parsers</div>
+            <div class="step-sub">Headings merged; ~350w chunks, 60w overlap</div>
+          </div>
+          <div class="step-box">
+            <div class="step-kicker">STEP 03</div>
+            <div class="step-title">Metadata Prefix</div>
+            <div class="step-sub">Prepend doc_id, title &amp; section_path → 117 chunks</div>
+          </div>
+          <div class="step-box">
+            <div class="step-kicker">STEP 04</div>
+            <div class="step-title">Dual Indexer</div>
+            <div class="step-sub">768-d dense vectors + stopword BM25 matrix</div>
+          </div>
+          <div class="step-box dark">
+            <div class="step-kicker">READY</div>
+            <div class="step-title">IndexFlatIP + chunks.db</div>
+            <div class="step-sub">Persisted SQLite &amp; FAISS; hot-swapped atomically</div>
+          </div>
+        </div>
+
+        <div class="pipeline-lane-label">
+          B. Online retrieval · Executed via search_policy_documents MCP tool
+        </div>
+        <div class="step-grid-5">
+          <div class="step-box">
+            <div class="step-kicker">STEP 01</div>
+            <div class="step-title">MCP Tool Call</div>
+            <div class="step-sub">search_policy_documents (query, top_k=5, filter)</div>
+          </div>
+          <div class="step-box">
+            <div class="step-kicker">STEP 02</div>
+            <div class="step-title">Dual + Synonym Index</div>
+            <div class="step-sub">HR synonym expansion → cosine + BM25 ranks</div>
+          </div>
+          <div class="step-box">
+            <div class="step-kicker">STEP 03</div>
+            <div class="step-title">Fuse RRF (k=60)</div>
+            <div class="step-sub">Reciprocal Rank Fusion + exact POL-ID boost</div>
+          </div>
+          <div class="step-box amber">
+            <div class="step-kicker">STEP 04</div>
+            <div class="step-title">Threshold Gate</div>
+            <div class="step-sub">RRF &gt;= 0.008 &amp; floor → else flag insufficient evidence</div>
+          </div>
+          <div class="step-box teal">
+            <div class="step-kicker">RESPONSE</div>
+            <div class="step-title">Cited Output</div>
+            <div class="step-sub">Sentence snippet extraction + strict claim citations</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 03 MCP tools & 04 Demo workflows -->
+      <div class="arch-grid-2">
+        <section id="sec-tools" class="arch-card">
+          <div class="arch-card-head" style="margin-bottom: 10px;">
+            <div>
+              <div class="arch-card-num">03</div>
+              <h2 class="arch-card-title">MCP server · 8 tools</h2>
+              <p class="arch-card-desc">
+                Tools expose policy retrieval, employee records, deterministic compliance rules, and confirmed=false ticket staging.
+              </p>
+            </div>
+          </div>
+
+          <div class="tool-group-label">Policy Evidence (Hybrid RAG)</div>
+          <div class="tool-chips">
+            <span class="tool-chip teal">search_policy_documents</span>
+            <span class="tool-chip teal">get_policy_section</span>
+          </div>
+
+          <div class="tool-group-label">Structured HR &amp; Compliance (Read + Preview)</div>
+          <div class="tool-chips">
+            <span class="tool-chip">lookup_employee_profile</span>
+            <span class="tool-chip">check_pto_balance</span>
+            <span class="tool-chip">lookup_benefits_status</span>
+            <span class="tool-chip">check_policy_compliance</span>
+            <span class="tool-chip">draft_hr_email</span>
+            <span class="tool-chip amber">create_mock_hr_ticket</span>
+          </div>
+
+          <div class="kv-notes">
+            <div class="kv-note-row">
+              <strong>Confirmed=false gate</strong>
+              create_mock_hr_ticket returns a staged preview until the user confirms in the UI modal.
+            </div>
+            <div class="kv-note-row">
+              <strong>Dual transport</strong>
+              MCP runs over stdio JSON-RPC locally &amp; on Render, or streamable HTTP in remote mode.
+            </div>
+            <div class="kv-note-row">
+              <strong>Human-visible citations</strong>
+              Every retrieved chunk retains doc_id, section_path, and anchor so claims link directly to the Policy corpus.
+            </div>
+          </div>
+        </section>
+
+        <section id="sec-workflows" class="arch-card">
+          <div class="arch-card-head" style="margin-bottom: 6px;">
+            <div>
+              <div class="arch-card-num">04</div>
+              <h2 class="arch-card-title">Demo workflows, traced</h2>
+              <p class="arch-card-desc">Concrete tool chains executed during live evaluation.</p>
+            </div>
+            <span class="format-tag">Recorded Gemini runs</span>
+          </div>
+
+          <article class="trace-mini-card">
+            <div class="trace-mini-head">
+              <div>Task 1 · International workcation conflict</div>
+              <span>6 tool calls · 10.38 s</span>
+            </div>
+            <div class="trace-mini-rows">
+              <div class="trace-mini-row">
+                <span class="trace-mini-k">Employee lookup</span>
+                <span class="trace-mini-v">EMP-1042 · Maya Lin</span>
+              </div>
+              <div class="trace-mini-row">
+                <span class="trace-mini-k">PTO &amp; rolling cap</span>
+                <span class="trace-mini-v">5 rolling intl days used (25 left)</span>
+              </div>
+              <div class="trace-mini-row">
+                <span class="trace-mini-k">Policy retrieval</span>
+                <span class="trace-mini-v">POL-003 §3.1, §3.2 · POL-005 §4</span>
+              </div>
+              <div class="trace-mini-row">
+                <span class="trace-mini-k">Compliance evaluator</span>
+                <span class="trace-mini-v amber">NON_COMPLIANT (+17d over cap)</span>
+              </div>
+              <div class="trace-mini-row">
+                <span class="trace-mini-k">Draft &amp; ticket staging</span>
+                <span class="trace-mini-v">draft_hr_email · create_mock_hr_ticket</span>
+              </div>
+            </div>
+          </article>
+
+          <article class="trace-mini-card">
+            <div class="trace-mini-head">
+              <div>Task 2 · Year-end PTO + Winter Recharge</div>
+              <span>7 tool calls · 20.84 s</span>
+            </div>
+            <div class="trace-mini-rows">
+              <div class="trace-mini-row">
+                <span class="trace-mini-k">Employee lookup</span>
+                <span class="trace-mini-v">EMP-1018 · Carlos Vega</span>
+              </div>
+              <div class="trace-mini-row">
+                <span class="trace-mini-k">Balance &amp; benefits</span>
+                <span class="trace-mini-v">7.5 PTO days left · Winter Recharge ok</span>
+              </div>
+              <div class="trace-mini-row">
+                <span class="trace-mini-k">Policy retrieval</span>
+                <span class="trace-mini-v">POL-001 §2, §4 · POL-002</span>
+              </div>
+              <div class="trace-mini-row">
+                <span class="trace-mini-k">Compliance evaluator</span>
+                <span class="trace-mini-v teal">COMPLIANT (2.5 PTO left after)</span>
+              </div>
+              <div class="trace-mini-row">
+                <span class="trace-mini-k">Staged ticket</span>
+                <span class="trace-mini-v">create_mock_hr_ticket (confirmed=false)</span>
+              </div>
+              <div class="trace-mini-row">
+                <span class="trace-mini-k">Confirm dialog</span>
+                <span class="trace-mini-v">Click Confirm → POST /confirm</span>
+              </div>
+            </div>
+          </article>
+        </section>
       </div>
-      <ul class="arch-list">
-        <li><strong>Cold-Start Behavior (Render Free Tier):</strong> Spins down after 15 minutes of inactivity; first request wakes in ~25&ndash;50 s because <code>Dockerfile</code> prebuilds the <code>hash</code> FAISS/SQLite index at image build time, while Gemini embeddings (<code>gemini-embedding-001</code>) upgrade atomically in a non-blocking background task (~1&ndash;2 min within Free-Tier 100 items/min quota).</li>
-        <li><strong>Measured Live Warm Performance:</strong> <code>GET /health</code> in <code>682 ms</code>&ndash;<code>1,250 ms</code>; live Gemini <code>/chat</code> Demo Task 1 in <code>10.38 s</code>; Demo Task 2 in <code>20.84 s</code>; off-domain refusal in <code>3.28 s</code>.</li>
-      </ul>
-    </section>
 
-    <!-- Section 6: Quantitative Evaluation & Ablations -->
-    <div class="arch-grid-2">
-      <section class="panel-card" aria-labelledby="eval-metrics-heading">
-        <div class="card-header-row">
-          <h2 id="eval-metrics-heading">6. End-to-End Evaluation (28 Benchmark Cases)</h2>
-          <span class="pill pill-ok">100% Pass</span>
+      <!-- 05 CI/CD & Deploy -->
+      <section id="sec-deploy" class="arch-card">
+        <div class="arch-card-head">
+          <div>
+            <div class="arch-card-num">05</div>
+            <h2 class="arch-card-title">CI/CD gate &amp; Render deployment</h2>
+            <p class="arch-card-desc">
+              Every push to main builds a fresh RAG index, runs the test suite, and enforces the 28-case evaluation gate before deploying.
+            </p>
+          </div>
+          <span class="format-tag">.github/workflows/ci.yml</span>
         </div>
-        <div class="data-table-wrap">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Evaluation Metric</th>
-                <th>Measured Result</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr class="highlight-row"><td>Overall Pass Rate (28/28 Queries)</td><td>100.0%</td></tr>
-              <tr><td>Groundedness Rate</td><td>100.0%</td></tr>
-              <tr><td>Key-Fact Rubric Recall</td><td>97.0% (0.9702)</td></tr>
-              <tr><td>Citation Precision / Recall / F1 (20 Answerable)</td><td>0.754 / 0.958 / 0.818</td></tr>
-              <tr><td>MCP Tool Selection Accuracy (7 Workflows)</td><td>100.0%</td></tr>
-              <tr><td>Multi-Step Workflow Completion Rate</td><td>100.0%</td></tr>
-              <tr><td>Clarification &amp; Safety Refusal Rate (8 Cases)</td><td>100.0%</td></tr>
-              <tr><td>Unconfirmed Irreversible Action Gate</td><td>100% (0 unauthorized writes)</td></tr>
-              <tr><td>Offline CI Latency (p50 / p95 / mean)</td><td>2.83 ms / 13.01 ms / 5.41 ms</td></tr>
-            </tbody>
-          </table>
+
+        <div class="step-grid-5">
+          <div class="step-box">
+            <div class="step-kicker">PUSH</div>
+            <div class="step-title">GitHub main</div>
+            <div class="step-sub">Triggers workflow on every commit</div>
+          </div>
+          <div class="step-box">
+            <div class="step-kicker">STEP 01</div>
+            <div class="step-title">Build RAG Index</div>
+            <div class="step-sub">python -m rag.ingest --provider hash</div>
+          </div>
+          <div class="step-box">
+            <div class="step-kicker">STEP 02</div>
+            <div class="step-title">Pytest Suite</div>
+            <div class="step-sub">Health, guardrails, MCP &amp; API tests</div>
+          </div>
+          <div class="step-box">
+            <div class="step-kicker">STEP 03</div>
+            <div class="step-title">28-Case Eval Gate</div>
+            <div class="step-sub">python -m evaluation.run_eval --provider mock</div>
+          </div>
+          <div class="step-box dark">
+            <div class="step-kicker">DEPLOY</div>
+            <div class="step-title">Render Webhook</div>
+            <div class="step-sub">Deploy hook triggered only after green checks</div>
+          </div>
+        </div>
+
+        <div class="deploy-split">
+          <div class="kv-notes" style="margin-top: 0; border-top: 0;">
+            <div class="kv-note-row" style="border-bottom: 0; padding-top: 0;">
+              <strong>Cold start</strong>
+              Render free tier sleeps after 15 min idle. The Docker image pre-bakes the hash FAISS index so <code>/health</code> wakes immediately while <code>gemini-embedding-001</code> upgrades asynchronously inside the 100 items/min free-tier quota.
+            </div>
+          </div>
+
+          <div>
+            <div class="tool-group-label" style="margin-top: 0;">Measured live warm timings</div>
+            <div class="warm-grid-2x2">
+              <div class="warm-cell">
+                <div class="warm-cell-label">GET /health</div>
+                <div class="warm-cell-val">682 – 1,250 ms</div>
+              </div>
+              <div class="warm-cell">
+                <div class="warm-cell-label">Demo Task 1 (/chat)</div>
+                <div class="warm-cell-val">10.38 s</div>
+              </div>
+              <div class="warm-cell">
+                <div class="warm-cell-label">Demo Task 2 (/chat)</div>
+                <div class="warm-cell-val">20.84 s</div>
+              </div>
+              <div class="warm-cell">
+                <div class="warm-cell-label">Off-domain refusal</div>
+                <div class="warm-cell-val">3.28 s</div>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
-      <section class="panel-card" aria-labelledby="ablation-heading">
-        <div class="card-header-row">
-          <h2 id="ablation-heading">7. Ablation Studies &amp; AI Tooling Impact</h2>
-          <span class="pill pill-neutral">+10 pts Recall &bull; +100 pts Workflow</span>
-        </div>
-        <div class="data-table-wrap" style="margin-bottom:12px;">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Retrieval Variant</th>
-                <th>Top-k</th>
-                <th>Doc Recall</th>
-                <th>Doc Prec.</th>
-                <th>MRR</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr><td>Hybrid (FAISS + BM25 + RRF)</td><td>2</td><td>0.842</td><td>0.825</td><td>0.925</td></tr>
-              <tr class="highlight-row"><td>Hybrid (Selected Default)</td><td>5</td><td>0.933</td><td>0.647</td><td>0.925</td></tr>
-              <tr><td>Hybrid (FAISS + BM25 + RRF)</td><td>8</td><td>0.958</td><td>0.567</td><td>0.925</td></tr>
-              <tr><td>Dense-Only (FAISS Cosine)</td><td>5</td><td>0.833</td><td>0.658</td><td>0.883</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="data-table-wrap" style="margin-bottom:12px;">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>System Architecture (7 Workflows)</th>
-                <th>Completion Rate</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr><td>RAG-Only Baseline (No MCP HR Tools)</td><td>0.0% (0/7)</td></tr>
-              <tr class="highlight-row"><td>Full Agentic Hybrid RAG + 8 MCP Tools</td><td>100.0% (7/7)</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <ul class="arch-list">
-          <li><strong>AI Tooling (<code>ai-tooling.md</code>):</strong> Used Google Antigravity / Gemini + docs MCP for multi-format corpus drafting, accessible UI, and 28-case evaluation; manual engineering resolved <code>mcp==2.3.0</code> API mismatches, Zero-Match RRF pollution, Free-Tier 100/min embedding pacing, and Gemini multi-turn thought signatures.</li>
-        </ul>
-      </section>
-    </div>
-  </main>
+      <!-- 06 End-to-end evaluation & 07 Ablations -->
+      <div class="arch-grid-2">
+        <section id="sec-eval" class="arch-card">
+          <div class="arch-card-head" style="margin-bottom: 10px;">
+            <div>
+              <div class="arch-card-num">06</div>
+              <h2 class="arch-card-title">End-to-end evaluation</h2>
+              <p class="arch-card-desc">Automated harness (evaluation/run_eval.py, seed 42).</p>
+            </div>
+            <span class="tool-chip teal">28 / 28 passed</span>
+          </div>
 
-  <script>
-    "use strict";
-    (async function hydrateLiveHealth() {
-      const healthPill = document.getElementById("health-pill");
-      const mcpPill = document.getElementById("mcp-pill");
-      const llmPill = document.getElementById("llm-pill");
-      try {
-        const res = await fetch("/health");
-        const data = await res.json();
-        healthPill.textContent = `Corpus: ${data.corpus_docs} docs / ${data.corpus_chunks} chunks`;
-        healthPill.className = "pill pill-ok";
-        mcpPill.textContent = `MCP (${data.mcp_transport}): ${(data.mcp_tools || []).length} tools`;
-        mcpPill.className = data.mcp_connected ? "pill pill-ok" : "pill pill-warn";
-        llmPill.textContent = `LLM: ${data.llm_provider} (${data.embedding_provider} emb)`;
-        llmPill.className = "pill pill-neutral";
-      } catch (err) {
-        healthPill.textContent = "Health check unavailable";
-        healthPill.className = "pill pill-danger";
-      }
-    })();
-  </script>
-</body>
+          <table class="eval-table" aria-label="End-to-end evaluation metrics">
+            <thead>
+              <tr>
+                <th scope="col">Metric</th>
+                <th scope="col" class="num">Result</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Overall Case Pass Rate (28/28)</td>
+                <td class="num val-teal">100.0%</td>
+              </tr>
+              <tr>
+                <td>Groundedness Rate</td>
+                <td class="num">100.0%</td>
+              </tr>
+              <tr>
+                <td>Key-Fact Rubric Recall</td>
+                <td class="num">97.0%</td>
+              </tr>
+              <tr>
+                <td>Citation Precision / Recall / F1</td>
+                <td class="num">0.754 / 0.958 / 0.818</td>
+              </tr>
+              <tr>
+                <td>MCP Tool Selection Accuracy (7 workflows)</td>
+                <td class="num">100.0%</td>
+              </tr>
+              <tr>
+                <td>Multi-Step Workflow Completion Rate</td>
+                <td class="num">100.0%</td>
+              </tr>
+              <tr>
+                <td>Ambiguous Query Clarification (4 cases)</td>
+                <td class="num">100.0%</td>
+              </tr>
+              <tr>
+                <td>OOS &amp; Injection Safety Refusal (4 cases)</td>
+                <td class="num">100.0%</td>
+              </tr>
+              <tr>
+                <td>Unconfirmed Action Gate</td>
+                <td class="num">100% (0 leaks)</td>
+              </tr>
+              <tr>
+                <td>Offline CI Latency (p50 / p95 / mean)</td>
+                <td class="num">2.83 / 13.01 / 5.41 ms</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section id="sec-ablations" class="arch-card">
+          <div class="arch-card-head" style="margin-bottom: 10px;">
+            <div>
+              <div class="arch-card-num">07</div>
+              <h2 class="arch-card-title">Ablations &amp; AI tooling</h2>
+              <p class="arch-card-desc">Two controlled ablations justify the architecture.</p>
+            </div>
+            <span class="format-tag">Hybrid vs. Dense · Agent vs. RAG</span>
+          </div>
+
+          <div class="tool-group-label" style="margin-top: 2px;">Retrieval ablation (20 answerable cases)</div>
+          <table class="eval-table" aria-label="Retrieval ablation comparison">
+            <thead>
+              <tr>
+                <th scope="col">Mode</th>
+                <th scope="col" class="num">Top-k</th>
+                <th scope="col" class="num">Doc Recall</th>
+                <th scope="col" class="num">Precision</th>
+                <th scope="col" class="num">MRR</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Hybrid RRF</td>
+                <td class="num">2</td>
+                <td class="num">
+                  <span class="mini-bar-wrap">
+                    <span class="mini-bar-track"><span class="mini-bar-fill" style="width: 84.2%;"></span></span>
+                    0.842
+                  </span>
+                </td>
+                <td class="num">0.825</td>
+                <td class="num">0.925</td>
+              </tr>
+              <tr class="row-highlight">
+                <td>Hybrid RRF ★</td>
+                <td class="num">5</td>
+                <td class="num val-teal">
+                  <span class="mini-bar-wrap">
+                    <span class="mini-bar-track"><span class="mini-bar-fill" style="width: 93.3%;"></span></span>
+                    0.933
+                  </span>
+                </td>
+                <td class="num">0.647</td>
+                <td class="num">0.925</td>
+              </tr>
+              <tr>
+                <td>Hybrid RRF</td>
+                <td class="num">8</td>
+                <td class="num">
+                  <span class="mini-bar-wrap">
+                    <span class="mini-bar-track"><span class="mini-bar-fill" style="width: 95.8%;"></span></span>
+                    0.958
+                  </span>
+                </td>
+                <td class="num">0.567</td>
+                <td class="num">0.925</td>
+              </tr>
+              <tr>
+                <td>Dense only</td>
+                <td class="num">5</td>
+                <td class="num">
+                  <span class="mini-bar-wrap">
+                    <span class="mini-bar-track"><span class="mini-bar-fill" style="width: 83.3%;"></span></span>
+                    0.833
+                  </span>
+                </td>
+                <td class="num">0.658</td>
+                <td class="num">0.883</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="tool-group-label" style="margin-top: 16px;">Agentic + MCP vs. RAG-only baseline (7 workflows)</div>
+          <table class="eval-table" aria-label="Agentic MCP vs RAG-only workflow completion">
+            <tbody>
+              <tr>
+                <td>RAG-Only Baseline (no MCP HR tools)</td>
+                <td class="num">0.0%</td>
+              </tr>
+              <tr class="row-highlight">
+                <td>Agentic Hybrid RAG + 8 MCP Tools</td>
+                <td class="num val-teal">100.0%</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="kv-notes">
+            <div class="kv-note-row">
+              <strong>AI tooling note (ai-tooling.md)</strong>
+              Built with Google Antigravity + Gemini &amp; Docs MCP for 12-doc corpus drafting, accessible UI, and 28-case evaluation; manual engineering resolved <code>mcp==2.3.0</code> API shifts, zero-BM25 RRF noise, Free-Tier 100/min embedding pacing, and Gemini multi-turn thought signatures.
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <script>
+      (async function hydrateArchitectureHeader() {
+        try {
+          const resp = await fetch("/health");
+          if (!resp.ok) return;
+          const h = await resp.json();
+          const docs = h.corpus_docs ?? 12;
+          const chunks = h.corpus_chunks ?? 117;
+          const tools = Array.isArray(h.mcp_tools) ? h.mcp_tools.length : (h.mcp_tools ?? 8);
+          const rawProv = String(h.llm_provider || "auto").toLowerCase();
+          const model = rawProv === "gemini" ? "Gemini" : rawProv === "mock" ? "Mock" : "Auto";
+
+          const navCorpusText = document.getElementById("nav-corpus-text");
+          const navMcpStat = document.getElementById("nav-mcp-stat");
+          const navModelStat = document.getElementById("nav-model-stat");
+          const navStatusDot = document.getElementById("nav-status-dot");
+          const kpiCorpusVal = document.getElementById("kpi-corpus-val");
+          const kpiMcpVal = document.getElementById("kpi-mcp-val");
+
+          if (navCorpusText) navCorpusText.innerHTML = `<strong>${docs}</strong> docs · <strong>${chunks}</strong> chunks`;
+          if (navMcpStat) navMcpStat.innerHTML = `MCP ${h.mcp_transport || "stdio"} · <strong>${tools} tools</strong>`;
+          if (navModelStat) navModelStat.innerHTML = `Model · <strong>${model}</strong>`;
+          if (navStatusDot) navStatusDot.className = h.mcp_connected ? "status-dot" : "status-dot warn";
+          if (kpiCorpusVal) kpiCorpusVal.textContent = `${docs} docs · ${chunks} chunks`;
+          if (kpiMcpVal) kpiMcpVal.textContent = `${tools} MCP tools`;
+        } catch {
+          const dot = document.getElementById("nav-status-dot");
+          if (dot) dot.className = "status-dot warn";
+        }
+      })();
+    </script>
+  </body>
 </html>

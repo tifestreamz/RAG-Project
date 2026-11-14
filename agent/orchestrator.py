@@ -59,6 +59,7 @@ class AgentOrchestrator:
                 "pending_confirmation": None,
                 "escalation": None,
                 "abstained": guard.blocked or guard.out_of_scope,
+                "ui_context": {},
                 "latency_ms": latency_ms,
             }
 
@@ -109,6 +110,7 @@ class AgentOrchestrator:
             "pending_confirmation": turn.pending_confirmation,
             "escalation": turn.escalation,
             "abstained": turn.abstained,
+            "ui_context": turn.ui_context,
             "latency_ms": latency_ms,
         }
 

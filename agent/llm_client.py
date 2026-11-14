@@ -91,6 +91,7 @@ class AgentTurnResult:
     pending_confirmation: dict[str, Any] | None = None
     escalation: dict[str, Any] | None = None
     abstained: bool = False
+    ui_context: dict[str, Any] = field(default_factory=dict)
 
 
 def _collect_artifacts_from_tool_call(
@@ -101,6 +102,7 @@ def _collect_artifacts_from_tool_call(
 ) -> list[str]:
     """Update citations, email drafts, pending ticket confirmations, and escalations."""
     step_citations: list[str] = []
+    ui_ctx: dict[str, Any] = state.setdefault("ui_context", {})
     if tool_name == "search_policy_documents":
         for hit in payload.get("hits", []):
             cid = hit.get("chunk_id", "")
@@ -139,11 +141,28 @@ def _collect_artifacts_from_tool_call(
                     "rrf_score": 1.0,
                 }
             state["any_in_threshold_hit"] = True
+    elif tool_name == "lookup_employee_profile" and payload.get("found") and payload.get("employee"):
+        ui_ctx["employee"] = payload["employee"]
+    elif tool_name == "check_pto_balance" and payload.get("found") and payload.get("pto_balance"):
+        ui_ctx["pto_balance"] = payload["pto_balance"]
+    elif tool_name == "lookup_benefits_status" and payload.get("found") and payload.get("benefits"):
+        ui_ctx["benefits"] = payload["benefits"]
     elif tool_name == "check_policy_compliance" and payload.get("found"):
         for ref in payload.get("policy_citations", []):
             step_citations.append(ref)
         status = payload.get("status")
         prio = payload.get("recommended_priority", "P3")
+        ui_ctx["compliance"] = {
+            "request_type": payload.get("request_type"),
+            "status": status,
+            "eligible": payload.get("eligible"),
+            "recommended_priority": prio,
+            "metrics": payload.get("metrics", {}),
+            "violations": payload.get("violations", []),
+            "warnings": payload.get("warnings", []),
+            "required_approvers": payload.get("required_approvers", []),
+            "policy_citations": payload.get("policy_citations", []),
+        }
         if status in {"NON_COMPLIANT", "ESCALATION_REQUIRED"} or prio in {"P1", "P2"}:
             state["escalation"] = {
                 "recommended": True,
@@ -298,6 +317,7 @@ class GeminiAgentRunner:
             pending_confirmation=state["pending_confirmation"],
             escalation=state["escalation"],
             abstained=abstained,
+            ui_context=state.get("ui_context", {}),
         )
 
 
@@ -517,6 +537,7 @@ class MockAgentRunner:
             pending_confirmation=state["pending_confirmation"],
             escalation=state["escalation"],
             abstained=False,
+            ui_context=state.get("ui_context", {}),
         )
 
     async def _run_employee_workflow(
@@ -778,6 +799,7 @@ class MockAgentRunner:
             pending_confirmation=state["pending_confirmation"],
             escalation=state["escalation"],
             abstained=False,
+            ui_context=state.get("ui_context", {}),
         )
 
     @staticmethod
