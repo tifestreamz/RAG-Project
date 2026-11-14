@@ -1632,12 +1632,102 @@ body {
   line-height: 1.6;
 }
 
-.doc-section-block ul {
-  margin: 4px 0 8px;
-  padding-left: 18px;
+.doc-section-block strong,
+.chunk-card-text strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.doc-section-block em,
+.chunk-card-text em {
+  font-style: italic;
+}
+
+.doc-section-block ul,
+.doc-section-block ol {
+  margin: 4px 0 10px;
+  padding-left: 20px;
   font-size: 0.85rem;
   color: var(--ink-2);
-  line-height: 1.55;
+  line-height: 1.6;
+}
+
+.doc-section-block li + li,
+.chunk-card-text li + li {
+  margin-top: 4px;
+}
+
+.corpus-inline-code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: var(--nav-active);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  color: var(--ink);
+}
+
+.corpus-table-wrap {
+  margin: 10px 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  overflow-x: auto;
+}
+
+.corpus-doc-table,
+.corpus-chunk-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-sans);
+  font-size: 0.81rem;
+  line-height: 1.45;
+  color: var(--ink-2);
+  white-space: normal;
+}
+
+.corpus-chunk-table {
+  font-family: var(--font-mono);
+}
+
+.corpus-doc-table th,
+.corpus-chunk-table th {
+  text-align: left;
+  padding: 9px 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--surface-subtle);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.corpus-doc-table td,
+.corpus-chunk-table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border-light);
+  vertical-align: top;
+}
+
+.corpus-doc-table tbody tr:last-child td,
+.corpus-chunk-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.corpus-doc-quote {
+  margin: 8px 0 10px;
+  padding: 8px 12px;
+  border-left: 3px solid var(--teal-border);
+  background: var(--surface-subtle);
+  border-radius: 0 6px 6px 0;
+  font-size: 0.84rem;
+  color: var(--ink-2);
+}
+
+.corpus-doc-hr {
+  border: 0;
+  border-top: 1px solid var(--border-light);
+  margin: 10px 0;
 }
 
 .chunks-lead {
@@ -1691,9 +1781,32 @@ body {
 .chunk-card-text {
   font-family: var(--font-mono);
   font-size: 0.78rem;
-  line-height: 1.6;
+  line-height: 1.62;
   color: var(--ink);
-  white-space: pre-wrap;
+  white-space: normal;
+}
+
+.chunk-card-text p {
+  margin: 0 0 6px;
+}
+
+.chunk-card-text p:last-child,
+.chunk-card-text ul:last-child,
+.chunk-card-text ol:last-child,
+.chunk-card-text .corpus-table-wrap:last-child {
+  margin-bottom: 0;
+}
+
+.chunk-card-text ul,
+.chunk-card-text ol {
+  margin: 6px 0 8px;
+  padding-left: 18px;
+}
+
+.corpus-chunk-table th,
+.corpus-chunk-table td {
+  padding: 7px 10px;
+  font-size: 0.76rem;
 }
 
 .draft-pre-dark {

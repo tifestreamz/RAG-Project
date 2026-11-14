@@ -91,9 +91,21 @@ function humanizeCategory(raw) {
 }
 
 function formatSimpleRichText(rawText) {
-  let html = escapeHtml(rawText || "");
-  html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+  let src = String(rawText || "");
+  if (!src) return "";
+  src = src.replace(/\|\s*:?-{2,}:?\s*(?:\|\s*:?-{2,}:?\s*)+\|/g, " ");
+  src = src.replace(/\s+\|\s+/g, " · ").replace(/^\|\s*|\s*\|$/g, "");
+  const codeSpans = [];
+  src = src.replace(/`([^`\n]+)`/g, (_, inner) => {
+    const idx = codeSpans.length;
+    codeSpans.push(`<code class="corpus-inline-code">${escapeHtml(inner)}</code>`);
+    return `\uE000CS${idx}\uE001`;
+  });
+  let html = escapeHtml(src);
+  html = html.replace(/\*\*((?:(?!\*\*).)+?)\*\*/g, "<strong>$1</strong>");
+  html = html.replace(/\*\*/g, "");
+  html = html.replace(/(^|[^\w*])\*([^\s*](?:[^*\n]*?[^\s*])?)\*(?=[^\w*]|$)/g, "$1<em>$2</em>");
+  html = html.replace(/\uE000CS(\d+)\uE001/g, (_, idx) => codeSpans[Number(idx)] || "");
   return html;
 }
 
@@ -350,8 +362,8 @@ function renderCitationsRail(citations) {
             </span>
             <span class="format-tag">${escapeHtml(fmtBadge)}</span>
           </div>
-          <h4 class="rail-card-title">${escapeHtml(cleanTitle)}</h4>
-          <p class="rail-card-snippet">${escapeHtml(c.snippet || "")}</p>
+          <h4 class="rail-card-title">${formatSimpleRichText(cleanTitle)}</h4>
+          <p class="rail-card-snippet">${formatSimpleRichText(c.snippet || "")}</p>
         </li>
       `;
     })

@@ -174,22 +174,145 @@ function switchModalTab(tabName) {
   docModalBody.scrollTop = 0;
 }
 
+function formatInlineMarkdown(raw) {
+  const src = String(raw || "");
+  if (!src) return "";
+  const codeSpans = [];
+  let work = src.replace(/`([^`\n]+)`/g, (_, inner) => {
+    const idx = codeSpans.length;
+    codeSpans.push(`<code class="corpus-inline-code">${escapeHtml(inner)}</code>`);
+    return `\uE000CS${idx}\uE001`;
+  });
+  work = work.replace(/\\\|/g, "|");
+  work = escapeHtml(work);
+  work = work.replace(/\*\*((?:(?!\*\*).)+?)\*\*/g, "<strong>$1</strong>");
+  work = work.replace(/(^|[^\w])__([^\s_](?:[^\n]*?[^\s_])?)__(?=$|[^\w])/g, "$1<strong>$2</strong>");
+  // Strip unmatched ** remnants from chunk word-overlap boundaries
+  work = work.replace(/\*\*/g, "");
+  work = work.replace(/(^|[^\w*])\*([^\s*](?:[^*\n]*?[^\s*])?)\*(?=[^\w*]|$)/g, "$1<em>$2</em>");
+  work = work.replace(/(^|[^\w_])_([^\s_](?:[^_\n]*?[^\s_])?)_(?=[^\w_]|$)/g, "$1<em>$2</em>");
+  work = work.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)<>]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+  work = work.replace(/\uE000CS(\d+)\uE001/g, (_, idx) => codeSpans[Number(idx)] || "");
+  return work;
+}
+
+function splitPipeRow(line) {
+  let trimmed = String(line || "").trim();
+  if (trimmed.startsWith("|")) trimmed = trimmed.slice(1);
+  if (trimmed.endsWith("|") && !trimmed.endsWith("\\|")) trimmed = trimmed.slice(0, -1);
+  const cells = [];
+  let cur = "";
+  for (let i = 0; i < trimmed.length; i++) {
+    if (trimmed[i] === "\\" && trimmed[i + 1] === "|") {
+      cur += "|";
+      i += 1;
+    } else if (trimmed[i] === "|") {
+      cells.push(cur.trim());
+      cur = "";
+    } else {
+      cur += trimmed[i];
+    }
+  }
+  cells.push(cur.trim());
+  return cells;
+}
+
+function parseTableAlignments(sepLine) {
+  const raw = String(sepLine || "").trim();
+  if (!raw.includes("|") || !raw.includes("-")) return null;
+  const cells = splitPipeRow(raw);
+  if (cells.length < 1) return null;
+  const aligns = [];
+  for (const cell of cells) {
+    if (!/^:?-{2,}:?$/.test(cell)) return null;
+    const left = cell.startsWith(":");
+    const right = cell.endsWith(":");
+    aligns.push(left && right ? "center" : right ? "right" : "left");
+  }
+  return aligns;
+}
+
+function buildHtmlTable(headers, rows, alignments, tableClass) {
+  const colCount = headers.length;
+  const aligns = alignments || headers.map(() => "left");
+  const ths = headers
+    .map((h, i) => {
+      const alignAttr = aligns[i] && aligns[i] !== "left" ? ` style="text-align:${aligns[i]}"` : "";
+      return `<th${alignAttr}>${formatInlineMarkdown(h)}</th>`;
+    })
+    .join("");
+  const trs = rows
+    .map((row) => {
+      const tds = Array.from({ length: colCount }, (_, i) => {
+        const alignAttr = aligns[i] && aligns[i] !== "left" ? ` style="text-align:${aligns[i]}"` : "";
+        return `<td${alignAttr}>${formatInlineMarkdown(row[i] ?? "")}</td>`;
+      }).join("");
+      return `<tr>${tds}</tr>`;
+    })
+    .join("");
+  return `<div class="corpus-table-wrap"><table class="${tableClass}"><thead><tr>${ths}</tr></thead><tbody>${trs}</tbody></table></div>`;
+}
+
+function parseKvPipeRow(line) {
+  const raw = String(line || "").trim();
+  if (!raw.includes("|") || raw.startsWith("|")) return null;
+  const parts = raw.split("|").map((p) => p.trim());
+  if (parts.length < 2) return null;
+  const pairs = [];
+  for (const part of parts) {
+    const m = part.match(/^([A-Za-z][A-Za-z0-9 /&()-]{1,40}):\s*(.+)$/);
+    if (!m) return null;
+    pairs.push([m[1].trim(), m[2].trim()]);
+  }
+  return pairs;
+}
+
 function renderSectionBody(text, heading) {
-  const lines = String(text || "").split(/\n+/);
+  const rawLines = String(text || "").split(/\r?\n/);
   const normHeading = String(heading || "").replace(/\s+/g, " ").trim().toLowerCase();
   const blocks = [];
-  let bullets = [];
+  let paraLines = [];
+  let listType = null;
+  let listStart = 1;
+  let listItems = [];
+  let quoteLines = [];
   let checkedFirst = false;
 
-  const flushBullets = () => {
-    if (!bullets.length) return;
-    blocks.push(`<ul>${bullets.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`);
-    bullets = [];
+  const flushPara = () => {
+    if (!paraLines.length) return;
+    blocks.push(`<p>${formatInlineMarkdown(paraLines.join(" "))}</p>`);
+    paraLines = [];
   };
 
-  for (const rawLine of lines) {
-    const line = rawLine.trim();
-    if (!line) continue;
+  const flushList = () => {
+    if (!listItems.length) return;
+    const tag = listType === "ol" ? "ol" : "ul";
+    const startAttr = tag === "ol" && listStart !== 1 ? ` start="${listStart}"` : "";
+    blocks.push(`<${tag}${startAttr}>${listItems.map((item) => `<li>${formatInlineMarkdown(item)}</li>`).join("")}</${tag}>`);
+    listItems = [];
+    listType = null;
+    listStart = 1;
+  };
+
+  const flushQuote = () => {
+    if (!quoteLines.length) return;
+    blocks.push(`<blockquote class="corpus-doc-quote">${quoteLines.map((q) => formatInlineMarkdown(q)).join("<br>")}</blockquote>`);
+    quoteLines = [];
+  };
+
+  const flushAll = () => {
+    flushPara();
+    flushList();
+    flushQuote();
+  };
+
+  for (let i = 0; i < rawLines.length; i++) {
+    const line = rawLines[i].trim();
+    if (!line) {
+      flushAll();
+      continue;
+    }
+
     if (!checkedFirst) {
       checkedFirst = true;
       const normLine = line.replace(/^#+\s*/, "").replace(/\s+/g, " ").trim().toLowerCase();
@@ -197,14 +320,98 @@ function renderSectionBody(text, heading) {
         continue;
       }
     }
-    if (line.startsWith("- ") || line.startsWith("• ") || line.startsWith("* ")) {
-      bullets.push(line.slice(2).trim());
-    } else {
-      flushBullets();
-      blocks.push(`<p>${escapeHtml(line)}</p>`);
+
+    // Markdown pipe table: header line + alignment separator line
+    if (line.includes("|") && i + 1 < rawLines.length) {
+      const aligns = parseTableAlignments(rawLines[i + 1]);
+      if (aligns) {
+        const headers = splitPipeRow(line);
+        if (headers.length >= 1) {
+          flushAll();
+          const rows = [];
+          let j = i + 2;
+          while (j < rawLines.length) {
+            const rowLine = rawLines[j].trim();
+            if (!rowLine || !rowLine.includes("|")) break;
+            rows.push(splitPipeRow(rowLine));
+            j += 1;
+          }
+          blocks.push(buildHtmlTable(headers, rows, aligns, "corpus-doc-table"));
+          i = j - 1;
+          continue;
+        }
+      }
     }
+
+    // Repeated Key: Val | Key2: Val2 lines (>= 2 consecutive rows sharing keys)
+    const kvFirst = parseKvPipeRow(line);
+    if (kvFirst && i + 1 < rawLines.length) {
+      const keySig = kvFirst.map(([k]) => k).join("\uE000");
+      const kvRows = [kvFirst.map(([, v]) => v)];
+      let j = i + 1;
+      while (j < rawLines.length) {
+        const kvNext = parseKvPipeRow(rawLines[j]);
+        if (!kvNext || kvNext.map(([k]) => k).join("\uE000") !== keySig) break;
+        kvRows.push(kvNext.map(([, v]) => v));
+        j += 1;
+      }
+      if (kvRows.length >= 2) {
+        flushAll();
+        blocks.push(buildHtmlTable(kvFirst.map(([k]) => k), kvRows, null, "corpus-doc-table"));
+        i = j - 1;
+        continue;
+      }
+    }
+
+    if (/^(?:-{3,}|\*{3,}|_{3,})$/.test(line)) {
+      flushAll();
+      blocks.push('<hr class="corpus-doc-hr">');
+      continue;
+    }
+
+    const headingMatch = line.match(/^#{2,4}\s+(.+)$/);
+    if (headingMatch) {
+      flushAll();
+      blocks.push(`<h4 class="corpus-doc-subhead">${formatInlineMarkdown(headingMatch[1].trim())}</h4>`);
+      continue;
+    }
+
+    if (line.startsWith("> ")) {
+      flushPara();
+      flushList();
+      quoteLines.push(line.slice(2).trim());
+      continue;
+    }
+    flushQuote();
+
+    const ulMatch = line.match(/^(?:[-•*])\s+(.+)$/);
+    if (ulMatch) {
+      flushPara();
+      if (listType !== "ul") {
+        flushList();
+        listType = "ul";
+      }
+      listItems.push(ulMatch[1].trim());
+      continue;
+    }
+
+    const olMatch = line.match(/^(\d+)\.\s+(.+)$/);
+    if (olMatch) {
+      flushPara();
+      if (listType !== "ol") {
+        flushList();
+        listType = "ol";
+        listStart = Number(olMatch[1]) || 1;
+      }
+      listItems.push(olMatch[2].trim());
+      continue;
+    }
+
+    flushList();
+    paraLines.push(line);
   }
-  flushBullets();
+
+  flushAll();
   return blocks.join("");
 }
 
@@ -234,7 +441,9 @@ function renderModalDocument(detail) {
 
   docTocList.innerHTML = sections
     .map((sec, idx) => {
-      const title = leafSectionTitle(sec.section_path, `Section ${idx + 1}`);
+      const title = leafSectionTitle(sec.section_path, `Section ${idx + 1}`)
+        .replace(/`([^`]+)`/g, "$1")
+        .replace(/\*\*/g, "");
       return `
         <li>
           <a href="#doc-sec-${idx}" class="doc-toc-link ${idx === 0 ? "active" : ""}" data-sec-idx="${idx}">
@@ -250,12 +459,185 @@ function renderModalDocument(detail) {
       const heading = leafSectionTitle(sec.section_path, `Section ${idx + 1}`);
       return `
         <article id="doc-sec-${idx}" class="doc-section-block" data-anchor="${escapeHtml(sec.page_or_anchor || "")}">
-          <h3>${escapeHtml(heading)}</h3>
+          <h3>${formatInlineMarkdown(heading)}</h3>
           ${renderSectionBody(sec.text, heading)}
         </article>
       `;
     })
     .join("");
+}
+
+function renderChunkProse(raw) {
+  const src = String(raw || "").trim();
+  if (!src) return "";
+  if (/\n\s*(?:[-•*]|\d+\.)\s+/.test(src) || /\n\s*\n/.test(src)) {
+    return renderSectionBody(src, "");
+  }
+  const normalized = src.replace(/\s+/g, " ").trim();
+  const boldBulletRe = /(?:^|\s)-\s+(?=\*\*)/g;
+  const matches = [...normalized.matchAll(boldBulletRe)];
+  if (matches.length >= 2) {
+    const firstIdx = matches[0].index;
+    const intro = normalized.slice(0, firstIdx).trim();
+    const rest = normalized.slice(firstIdx).trim();
+    const items = rest
+      .split(/\s+-\s+(?=\*\*)/)
+      .map((s) => s.replace(/^-\s+/, "").trim())
+      .filter(Boolean);
+    const introHtml = intro ? `<p>${formatInlineMarkdown(intro)}</p>` : "";
+    const listHtml = items.length ? `<ul>${items.map((item) => `<li>${formatInlineMarkdown(item)}</li>`).join("")}</ul>` : "";
+    return `${introHtml}${listHtml}`;
+  }
+  return `<p>${formatInlineMarkdown(normalized)}</p>`;
+}
+
+function tryExtractInlinePipeTable(src) {
+  const sepRe = /\|\s*:?-{2,}:?\s*(?:\|\s*:?-{2,}:?\s*)+\|/g;
+  let sepMatch;
+  while ((sepMatch = sepRe.exec(src)) !== null) {
+    const aligns = parseTableAlignments(sepMatch[0]);
+    if (!aligns) continue;
+    const colCount = aligns.length;
+    let p = sepMatch.index - 1;
+    while (p >= 0 && /\s/.test(src[p])) p -= 1;
+    if (p < 0 || src[p] !== "|") continue;
+
+    // Walk backward across `colCount` earlier unescaped pipes to find header opening `|`
+    const hdrCloseIdx = p;
+    let pipesNeeded = colCount;
+    let hdrOpenIdx = -1;
+    for (let k = hdrCloseIdx - 1; k >= 0; k--) {
+      if (src[k] === "|" && (k === 0 || src[k - 1] !== "\\")) {
+        pipesNeeded -= 1;
+        if (pipesNeeded === 0) {
+          hdrOpenIdx = k;
+          break;
+        }
+      }
+    }
+    if (hdrOpenIdx < 0) continue;
+    const headers = splitPipeRow(src.slice(hdrOpenIdx, hdrCloseIdx + 1));
+    if (headers.length !== colCount) continue;
+
+    let cursor = sepMatch.index + sepMatch[0].length;
+    const rows = [];
+    while (cursor < src.length) {
+      let rowStart = cursor;
+      while (rowStart < src.length && /\s/.test(src[rowStart])) rowStart += 1;
+      if (rowStart >= src.length || src[rowStart] !== "|") break;
+
+      let pipesFound = 0;
+      let rowCloseIdx = -1;
+      for (let k = rowStart + 1; k < src.length; k++) {
+        if (src[k] === "\\" && src[k + 1] === "|") {
+          k += 1;
+          continue;
+        }
+        if (src[k] === "|") {
+          pipesFound += 1;
+          if (pipesFound === colCount) {
+            rowCloseIdx = k;
+            break;
+          }
+        }
+      }
+      if (rowCloseIdx < 0) break;
+      const cells = splitPipeRow(src.slice(rowStart, rowCloseIdx + 1));
+      if (cells.length !== colCount) break;
+      rows.push(cells);
+      cursor = rowCloseIdx + 1;
+    }
+
+    if (!rows.length) continue;
+    return {
+      start: hdrOpenIdx,
+      end: cursor,
+      tableHtml: buildHtmlTable(headers, rows, aligns, "corpus-chunk-table"),
+    };
+  }
+  return null;
+}
+
+function tryExtractInlineKvTable(src) {
+  if (!src.includes("|")) return null;
+  const keyTokenRe = /\b([A-Z][A-Za-z0-9 /&()-]{1,32}):\s/g;
+  const seenKeys = new Set();
+  let match;
+  while ((match = keyTokenRe.exec(src)) !== null) {
+    const firstKey = match[1].trim();
+    if (seenKeys.has(firstKey)) continue;
+    seenKeys.add(firstKey);
+
+    const keyStart = match.index;
+    const tailAfterKey = src.slice(keyStart);
+    const firstPipeIdx = tailAfterKey.indexOf("|");
+    if (firstPipeIdx < 0 || firstPipeIdx > 180) continue;
+
+    const escapedKey = firstKey.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const rowAnchorRe = new RegExp(`\\b(${escapedKey}:\\s)`, "g");
+    const anchors = [];
+    let am;
+    while ((am = rowAnchorRe.exec(src)) !== null) {
+      anchors.push(am.index);
+    }
+    if (anchors.length < 2) continue;
+
+    const slices = anchors.map((start, idx) =>
+      src.slice(start, idx + 1 < anchors.length ? anchors[idx + 1] : src.length).trim()
+    );
+    const parsedRows = slices.map(parseKvPipeRow);
+    if (parsedRows.some((r) => !r)) continue;
+
+    const keySig = parsedRows[0].map(([k]) => k).join("\uE000");
+    if (!parsedRows.every((r) => r.map(([k]) => k).join("\uE000") === keySig)) continue;
+
+    const headers = parsedRows[0].map(([k]) => k);
+    const rows = parsedRows.map((r) => r.map(([, v]) => v));
+    const lastRowIdx = rows.length - 1;
+    const lastColIdx = headers.length - 1;
+    const prevLengths = rows.slice(0, lastRowIdx).map((r) => r[lastColIdx].length);
+    const maxPrevLen = prevLengths.length ? Math.max(...prevLengths) : 32;
+    let lastCell = rows[lastRowIdx][lastColIdx];
+    let trailingProse = "";
+
+    if (lastCell.length > maxPrevLen + 10) {
+      const parenSplit = lastCell.match(/^(.+?\))\s+([A-Z][a-z]+(?:\s+[a-z*].*|\s+[A-Z].*))$/);
+      const proseStarterSplit = lastCell.match(
+        /^([A-Z0-9$][^\n]{2,40}?)\s+((?:Employees|Staff|Workers|Contractors|Interns|Managers|Travelers|Approvals|Requests|Exceptions|All|Any|The|This|These|Those|Please|See|For|If|When|Note|Eligible|Standard)\s+[a-z(].+)$/
+      );
+      const sentenceSplit =
+        lastCell.length > Math.max(55, maxPrevLen * 2)
+          ? lastCell.match(/^([^.!?]+[.!?])\s+([A-Z*].+)$/)
+          : null;
+      const chosen = parenSplit || proseStarterSplit || sentenceSplit;
+      if (chosen) {
+        lastCell = chosen[1].trim();
+        trailingProse = chosen[2].trim();
+        rows[lastRowIdx][lastColIdx] = lastCell;
+      }
+    }
+
+    return {
+      start: anchors[0],
+      end: trailingProse ? src.length - trailingProse.length : src.length,
+      tableHtml: buildHtmlTable(headers, rows, null, "corpus-chunk-table"),
+    };
+  }
+  return null;
+}
+
+function renderChunkBody(rawText) {
+  const src = String(rawText || "").trim();
+  if (!src) return "";
+  const pipeTable = tryExtractInlinePipeTable(src);
+  if (pipeTable) {
+    return `${renderChunkBody(src.slice(0, pipeTable.start))}${pipeTable.tableHtml}${renderChunkBody(src.slice(pipeTable.end))}`;
+  }
+  const kvTable = tryExtractInlineKvTable(src);
+  if (kvTable) {
+    return `${renderChunkBody(src.slice(0, kvTable.start))}${kvTable.tableHtml}${renderChunkBody(src.slice(kvTable.end))}`;
+  }
+  return renderChunkProse(src);
 }
 
 function renderModalChunks(detail) {
@@ -284,9 +666,9 @@ function renderModalChunks(detail) {
               <strong>chunk ${escapeHtml(num)}</strong>
               <span class="chunk-card-anchor">${escapeHtml(anchor)}</span>
             </div>
-            <div class="chunk-card-sec">${escapeHtml(secPath)}</div>
+            <div class="chunk-card-sec">${formatInlineMarkdown(secPath)}</div>
           </div>
-          <div class="chunk-card-text">${escapeHtml(chunk.text)}</div>
+          <div class="chunk-card-text">${renderChunkBody(chunk.text)}</div>
         </article>
       `;
     })
