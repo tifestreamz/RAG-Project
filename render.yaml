@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: northstar-hr-agentic-rag
+    runtime: docker
+    plan: free
+    region: oregon
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: LLM_PROVIDER
+        value: auto
+      - key: EMBEDDING_PROVIDER
+        value: auto
+      - key: GEMINI_MODEL
+        value: gemini-3.5-flash-lite
+      - key: GEMINI_EMBEDDING_MODEL
+        value: gemini-embedding-001
+      - key: EMBEDDING_DIM
+        value: "768"
+      - key: MCP_TRANSPORT
+        value: stdio
+      - key: RAG_TOP_K
+        value: "5"
+      - key: RANDOM_SEED
+        value: "42"

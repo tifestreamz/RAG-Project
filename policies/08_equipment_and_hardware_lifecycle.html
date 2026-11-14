@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>POL-008: Equipment and Hardware Lifecycle Policy</title>
+</head>
+<body>
+  <article data-doc-id="POL-008" data-category="equipment">
+    <h1>POL-008: Equipment and Hardware Lifecycle Policy</h1>
+    <ul class="policy-meta">
+      <li><strong>Document ID:</strong> POL-008</li>
+      <li><strong>Policy Title:</strong> Equipment and Hardware Lifecycle Policy</li>
+      <li><strong>Category:</strong> equipment</li>
+      <li><strong>Effective Date:</strong> January 1, 2026</li>
+      <li><strong>Owner:</strong> Northstar IT Operations &amp; InfoSec (infosec@northstarcloud.example)</li>
+    </ul>
+
+    <section>
+      <h2>1. Purpose and Scope</h2>
+      <p>Northstar Cloud Labs, Inc. supplies standardized, centrally managed computing hardware to ensure endpoint security, Mobile Device Management (MDM) compliance, asset inventory accuracy, and zero-trust access control. This policy applies to all full-time employees, part-time employees, interns, and authorized contractors using Northstar-managed hardware across all global offices and remote workspaces.</p>
+    </section>
+
+    <section>
+      <h2>2. Standard-Issue Laptop Tiers and Refresh Cycle</h2>
+      <p>New hires select their workstation configuration via the IT Asset Portal during pre-boarding so devices ship pre-enrolled before Day 1:</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Role Track</th>
+            <th>Standard Issue Hardware</th>
+            <th>Budget Cap</th>
+            <th>Refresh Cycle</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Engineering, SRE, Data, Product Design</td>
+            <td>14" or 16" MacBook Pro (36GB+ RAM) or Managed Linux Workstation</td>
+            <td>$2,800 USD</td>
+            <td>3 Years (36 months)</td>
+          </tr>
+          <tr>
+            <td>General, People Ops, Finance, GTM</td>
+            <td>13" or 14" MacBook Air / Enterprise Ultrabook (16GB+ RAM)</td>
+            <td>$1,800 USD</td>
+            <td>3 Years (36 months)</td>
+          </tr>
+          <tr>
+            <td>Fixed-Term Interns</td>
+            <td>Refurbished Cohort Loaner MacBook Air / Ultrabook</td>
+            <td>Company Loaner</td>
+            <td>End of Internship</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>Employees reaching the 36-month mark may request a hardware refresh through IT Operations. Once the replacement device is migrated and verified in MDM, the prior laptop must be returned within 10 business days using the prepaid courier label provided by IT.</p>
+    </section>
+
+    <section>
+      <h2>3. Strict Prohibition on Self-Purchased Laptops</h2>
+      <p>Employees may <strong>not</strong> purchase a personal or retail laptop out-of-pocket (for example, from an Apple Store, Best Buy, Amazon, or local electronics retailer) and submit the receipt for expense reimbursement on a corporate card or personal expense claim (see <strong>POL-004 Section 6</strong>). All primary computing workstations must be procured directly through Northstar's IT Asset Portal so they ship enrolled in Apple Business Manager / enterprise MDM, with FileVault/BitLocker escrow keys and endpoint detection agents pre-configured. Self-purchased laptops will be denied reimbursement even when the price is below the $1,800 or $2,800 budget cap.</p>
+      <p><strong>Exception Process:</strong> Only in extraordinary international customs emergencies where IT courier delivery fails prior to an employee's start date may the Director of IT issue written pre-approval for temporary local procurement—and such hardware must be wiped and enrolled into corporate MDM by IT prior to accessing any Northstar system.</p>
+    </section>
+
+    <section>
+      <h2>4. Peripherals, Monitors, and Clean Travel Loaner Laptops</h2>
+      <h3>4.1 Hub Docking &amp; Home Peripherals</h3>
+      <p>All hub desks provide dual USB-C monitors and ergonomic seating. Remote and hybrid employees seeking home-office chairs, standing desks, monitor arms, or ergonomic keyboards must utilize their one-time <strong>$500 Home Office Ergonomic Stipend</strong> under <strong>POL-004 Section 5</strong> rather than submitting IT asset requests. Standard adapters (USB-C hubs, replacement MagSafe chargers up to $80) are supplied by IT Operations upon ticket request.</p>
+      <h3>4.2 Clean Travel Loaner Laptops</h3>
+      <p>Per <strong>POL-005 (Information Security Policy)</strong>, employees holding elevated <code>Prod-Admin</code> or <code>Customer-PII</code> security tiers who travel internationally—including approved international workcations under <strong>POL-003</strong>—must request a wiped <strong>Clean Travel Loaner Laptop</strong> via IT Operations at least <strong>10 business days prior to departure</strong> and return it within <strong>3 business days</strong> of returning home.</p>
+    </section>
+
+    <section>
+      <h2>5. Lost, Stolen, or Damaged Hardware and Offboarding</h2>
+      <ul>
+        <li><strong>24-Hour Incident Reporting:</strong> Lost, stolen, or physically compromised corporate laptops, phones, or FIDO2 YubiKey tokens must be reported to InfoSec (<code>infosec@northstarcloud.example</code>) and IT Operations within <strong>24 hours</strong> so MDM remote wipe, BitLocker/FileVault lock, and SSO token revocation can be executed immediately.</li>
+        <li><strong>Accidental Damage Repairs:</strong> Accidental hardware damage (e.g., cracked display, liquid spill) is covered by corporate AppleCare+ / enterprise warranty for the first incident; repeated negligence within 12 months triggers manager review.</li>
+        <li><strong>Offboarding Return Protocol:</strong> All corporate laptops, loaner devices, monitors, and security keys remain Northstar property and must be returned via the prepaid IT shipping kit within <strong>5 business days</strong> of separation or end of internship.</li>
+      </ul>
+    </section>
+  </article>
+</body>
+</html>

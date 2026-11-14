@@ -1,0 +1,41 @@
+POL-011: HR Case Triage, Ticketing, and Escalation Standard Operating Procedure
+Document ID: POL-011
+Policy Title: HR Case Triage, Ticketing, and Escalation Standard Operating Procedure
+Category: conduct
+Effective Date: January 1, 2026
+Owner: Northstar People Operations (people-ops@northstarcloud.example)
+
+Section 1. Purpose and Scope
+This Standard Operating Procedure (SOP) defines how People Operations, HR advisors, managers, and automated HR support systems classify, triage, document, and escalate employee inquiries, policy exceptions, and sensitive workplace cases at Northstar Cloud Labs, Inc. Every HR workflow must distinguish between factual policy rules, employee-specific structured records, and actionable escalation recommendations.
+
+Section 2. Severity Tiers and Service Level Agreements (SLAs)
+2.1 Priority P1 — Urgent Safety, Harassment, Legal, or Ethics Escalation (SLA: 4 Business Hours)
+Triggers: Workplace harassment, discrimination, manager retaliation, physical safety threats, whistleblower fraud reports, unauthorized customer PII data exposure, or urgent disability/medical leave disputes (POL-010, POL-005).
+Required Routing: Immediately escalate to the Confidential People Operations & Ethics Queue (ethics@northstarcloud.example). Never notify or CC the employee's direct manager if the manager is implicated or if confidentiality could be jeopardized.
+
+2.2 Priority P2 — Policy Exception, Mobility, or Payroll Compliance (SLA: 1 Business Day)
+Triggers: Requests exceeding standard quantitative thresholds or requiring multi-stakeholder sign-off, including:
+- International remote work exceeding 30 rolling days or outside pre-approved jurisdictions (POL-003).
+- Prod-Admin or Customer-PII travel loaner laptop provisioning (POL-005, POL-008).
+- PTO borrowing into negative balance or PTO exceeding 2 days during a blackout window (POL-001).
+- Probationary leave exceptions for 3+ consecutive PTO days within the first 90 days (POL-007).
+- Expense cap overrides or L&D/travel budget splits over $500 (POL-004, POL-006).
+Required Routing: Manager + People Operations + InfoSec or Department VP as defined by the underlying policy.
+
+2.3 Priority P3 — Standard Operational Request (SLA: 3 Business Days)
+Triggers: Routine PTO scheduling within available balance and notice thresholds, benefits plan comparisons, standard $500 home-office ergonomic stipend questions, or routine policy clarifications.
+Required Routing: Standard People Portal queue or direct manager approval.
+
+Section 3. Required Ticket Fields and Irreversible Action Safeguards
+Every HR ticket logged in the case management system must contain:
+- employee_id: Verified employee identifier (e.g., EMP-1018). If missing, ask the employee to provide their ID or work email before submitting a case.
+- category: One of remote_work, pto_leave, benefits, expense, security_travel, conduct_escalation, or general_hr.
+- priority: P1, P2, or P3.
+- summary: Objective, factual summary citing relevant dates, balances, or exception type.
+- policy_references: Exact Document IDs governing the request (e.g., POL-001, POL-002).
+
+3.1 Human-in-the-Loop Confirmation Requirement
+Automated HR assistants must never execute irreversible actions—such as submitting an official HR case ticket, sending a formal email to a manager or VP, or altering leave balances—without explicit user confirmation. Automated tools must first generate a transparent draft preview (displaying recipient, priority, summary, and cited policies) and require explicit user confirmation before persisting any mock or live record.
+
+Section 4. Incomplete Evidence and Out-of-Scope Triage
+If policy evidence is incomplete, ambiguous, or concerns a topic outside Northstar's published policy corpus (such as personal stock investments, personal tax return preparation, or office locations not operated by Northstar), HR assistants must explicitly state the gap, avoid speculating, and redirect the employee to People Operations or an appropriate licensed professional.

@@ -1,0 +1,38 @@
+{
+  "synthetic_notice": "All HR ticket records in this file are 100% synthetic mock data.",
+  "tickets": [
+    {
+      "ticket_id": "HR-1001",
+      "employee_id": "EMP-1042",
+      "category": "remote_work",
+      "priority": "P3",
+      "summary": "Approved 5-day domestic/international workcation in Montreal, CA (July 2026).",
+      "status": "CLOSED_APPROVED",
+      "policy_references": ["POL-003"],
+      "created_at": "2026-07-02T14:20:00Z",
+      "is_mock": true
+    },
+    {
+      "ticket_id": "HR-1002",
+      "employee_id": "EMP-1018",
+      "category": "expense",
+      "priority": "P3",
+      "summary": "Home office ergonomic desk lamp and monitor arm reimbursement ($350.00).",
+      "status": "CLOSED_PAID",
+      "policy_references": ["POL-004"],
+      "created_at": "2026-08-14T10:05:00Z",
+      "is_mock": true
+    },
+    {
+      "ticket_id": "HR-1003",
+      "employee_id": "EMP-1055",
+      "category": "security_travel",
+      "priority": "P2",
+      "summary": "Clean travel loaner laptop issued for 4-day Dublin conference attendance.",
+      "status": "CLOSED_COMPLETED",
+      "policy_references": ["POL-005", "POL-008"],
+      "created_at": "2026-09-21T16:45:00Z",
+      "is_mock": true
+    }
+  ]
+}

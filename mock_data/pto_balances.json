@@ -1,0 +1,110 @@
+{
+  "leave_year": 2026,
+  "synthetic_notice": "All PTO balances in this file are 100% synthetic mock data.",
+  "balances": {
+    "EMP-1001": {
+      "eligible_for_pto": true,
+      "accrual_tier": "5+ years (25 days/year)",
+      "annual_allowance_days": 25.0,
+      "carryover_days": 3.0,
+      "accrued_ytd_days": 25.0,
+      "used_days": 11.0,
+      "pending_days": 0.0,
+      "remaining_days": 17.0,
+      "floating_holidays_remaining": 1,
+      "international_remote_days_used_rolling_12m": 0,
+      "blackout_team_flag": false
+    },
+    "EMP-1002": {
+      "eligible_for_pto": true,
+      "accrual_tier": "2-4 years (20 days/year)",
+      "annual_allowance_days": 20.0,
+      "carryover_days": 2.0,
+      "accrued_ytd_days": 20.0,
+      "used_days": 9.0,
+      "pending_days": 0.0,
+      "remaining_days": 13.0,
+      "floating_holidays_remaining": 2,
+      "international_remote_days_used_rolling_12m": 7,
+      "blackout_team_flag": false
+    },
+    "EMP-1003": {
+      "eligible_for_pto": true,
+      "accrual_tier": "2-4 years (20 days/year)",
+      "annual_allowance_days": 20.0,
+      "carryover_days": 0.0,
+      "accrued_ytd_days": 20.0,
+      "used_days": 10.0,
+      "pending_days": 2.0,
+      "remaining_days": 8.0,
+      "floating_holidays_remaining": 0,
+      "international_remote_days_used_rolling_12m": 0,
+      "blackout_team_flag": false
+    },
+    "EMP-1018": {
+      "eligible_for_pto": true,
+      "accrual_tier": "2-4 years (20 days/year)",
+      "annual_allowance_days": 20.0,
+      "carryover_days": 0.0,
+      "accrued_ytd_days": 20.0,
+      "used_days": 12.5,
+      "pending_days": 0.0,
+      "remaining_days": 7.5,
+      "floating_holidays_remaining": 1,
+      "international_remote_days_used_rolling_12m": 0,
+      "blackout_team_flag": false
+    },
+    "EMP-1042": {
+      "eligible_for_pto": true,
+      "accrual_tier": "0-2 years (15 days/year)",
+      "annual_allowance_days": 15.0,
+      "carryover_days": 0.0,
+      "accrued_ytd_days": 15.0,
+      "used_days": 4.0,
+      "pending_days": 0.0,
+      "remaining_days": 11.0,
+      "floating_holidays_remaining": 2,
+      "international_remote_days_used_rolling_12m": 5,
+      "blackout_team_flag": false
+    },
+    "EMP-1055": {
+      "eligible_for_pto": true,
+      "accrual_tier": "2-4 years (20 days/year)",
+      "annual_allowance_days": 20.0,
+      "carryover_days": 1.0,
+      "accrued_ytd_days": 20.0,
+      "used_days": 8.0,
+      "pending_days": 0.0,
+      "remaining_days": 13.0,
+      "floating_holidays_remaining": 2,
+      "international_remote_days_used_rolling_12m": 4,
+      "blackout_team_flag": true
+    },
+    "EMP-1071": {
+      "eligible_for_pto": true,
+      "accrual_tier": "0-2 years (15 days/year, pro-rated)",
+      "annual_allowance_days": 15.0,
+      "carryover_days": 0.0,
+      "accrued_ytd_days": 2.5,
+      "used_days": 0.0,
+      "pending_days": 0.0,
+      "remaining_days": 2.5,
+      "floating_holidays_remaining": 1,
+      "international_remote_days_used_rolling_12m": 0,
+      "blackout_team_flag": false
+    },
+    "EMP-1089": {
+      "eligible_for_pto": false,
+      "accrual_tier": "Ineligible (1099 Contractor)",
+      "annual_allowance_days": 0.0,
+      "carryover_days": 0.0,
+      "accrued_ytd_days": 0.0,
+      "used_days": 0.0,
+      "pending_days": 0.0,
+      "remaining_days": 0.0,
+      "floating_holidays_remaining": 0,
+      "international_remote_days_used_rolling_12m": 0,
+      "blackout_team_flag": false
+    }
+  }
+}

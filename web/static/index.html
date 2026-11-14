@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Northstar Cloud Labs — HR Policy &amp; Operations Copilot</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to main workspace</a>
+
+  <header class="top-header">
+    <div class="header-inner">
+      <div class="brand">
+        <span class="brand-badge" aria-hidden="true">NS</span>
+        <div>
+          <h1>Northstar HR Policy &amp; Operations Copilot</h1>
+          <p class="subtitle">Agentic Hybrid RAG (FAISS + BM25 + RRF) &bull; Model Context Protocol (MCP)</p>
+        </div>
+      </div>
+      <div class="status-pills" aria-label="System runtime status">
+        <span id="health-pill" class="pill pill-loading">Checking system&hellip;</span>
+        <span id="mcp-pill" class="pill pill-neutral">MCP: connecting</span>
+        <span id="llm-pill" class="pill pill-neutral">Mode: auto</span>
+        <a class="header-link" href="/docs" target="_blank" rel="noopener noreferrer">API Docs</a>
+      </div>
+    </div>
+  </header>
+
+  <div id="sr-status" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+  <div id="error-banner" class="error-banner" role="alert" aria-live="assertive" hidden></div>
+
+  <div class="app-shell">
+    <nav class="sidebar" aria-label="Quick demo tasks and synthetic personas">
+      <section class="panel-card">
+        <h2>Interactive Demo Workflows</h2>
+        <p class="muted-text">Launch pre-configured multi-step HR workflows that trigger Hybrid RAG and MCP tools:</p>
+        <div id="demo-buttons" class="demo-list"></div>
+      </section>
+
+      <section class="panel-card">
+        <h2>Synthetic HR Personas</h2>
+        <p class="muted-text">Click a persona ID to insert into your query:</p>
+        <ul id="persona-list" class="persona-list"></ul>
+      </section>
+
+      <section class="panel-card">
+        <div class="card-header-row">
+          <h2>Mock Tickets Log</h2>
+          <button type="button" id="refresh-tickets-btn" class="btn-secondary btn-sm">Refresh</button>
+        </div>
+        <p class="muted-text">Persisted only after explicit confirmation (<code>is_mock: true</code>):</p>
+        <ul id="tickets-list" class="tickets-list"></ul>
+      </section>
+    </nav>
+
+    <main id="main-content" class="workspace" tabindex="-1">
+      <section class="panel-card conversation-card" aria-labelledby="assistant-heading">
+        <div class="card-header-row">
+          <h2 id="assistant-heading">HR Assistant Workspace</h2>
+          <div class="runtime-metrics">
+            <span id="mode-badge" class="pill pill-neutral">Ready</span>
+            <span id="latency-badge" class="pill pill-neutral">&mdash; ms</span>
+          </div>
+        </div>
+
+        <form id="chat-form" class="composer" novalidate>
+          <div class="composer-label-row">
+            <label for="query-input">Ask an HR policy question or submit an employee compliance workflow</label>
+            <span class="keyboard-hint">Press <kbd>Enter</kbd> to send &bull; <kbd>Shift</kbd>+<kbd>Enter</kbd> for new line</span>
+          </div>
+          <textarea
+            id="query-input"
+            name="message"
+            rows="3"
+            placeholder="Example: Can Maya Lin (EMP-1042) take a 6-week remote workcation from Lisbon, Portugal?"
+            required
+          ></textarea>
+          <div class="composer-actions">
+            <div class="inline-control">
+              <label for="provider-select">Execution Engine:</label>
+              <select id="provider-select" name="provider_override">
+                <option value="auto" selected>Auto (Gemini if keyed, else MCP Mock)</option>
+                <option value="gemini">Gemini 3.5 Flash-Lite</option>
+                <option value="mock">Deterministic MCP Mock</option>
+              </select>
+            </div>
+            <div class="btn-group">
+              <button type="button" id="clear-btn" class="btn-secondary">Clear</button>
+              <button type="submit" id="send-btn" class="btn-primary">Run Agent Workflow</button>
+            </div>
+          </div>
+        </form>
+
+        <article id="answer-container" class="answer-box" aria-label="Agent response">
+          <p class="placeholder-text">
+            Select a Demo Workflow on the left or submit a policy question above to inspect real-time
+            Hybrid RAG retrieval, MCP tool execution, policy compliance verdicts, email drafts, and
+            human-in-the-loop ticket confirmations.
+          </p>
+        </article>
+
+        <section id="escalation-card" class="action-card escalation-alert" hidden>
+          <div class="card-header-row">
+            <h3>Escalation &amp; Approval Routing</h3>
+            <span id="escalation-priority-pill" class="pill pill-warn">P2</span>
+          </div>
+          <div id="escalation-body"></div>
+        </section>
+
+        <section id="draft-card" class="action-card" hidden>
+          <div class="card-header-row">
+            <h3>Generated Approval / Escalation Email Draft (Review Only)</h3>
+            <button type="button" id="copy-draft-btn" class="btn-secondary btn-sm">Copy Draft</button>
+          </div>
+          <div id="draft-meta" class="draft-meta"></div>
+          <pre id="draft-body" class="draft-pre"></pre>
+        </section>
+
+        <section id="confirm-card" class="action-card confirm-gate-card" hidden>
+          <div class="card-header-row">
+            <h3>Mock HR Ticket Preview (Requires Confirmation)</h3>
+            <span class="pill pill-warn">UNCONFIRMED PREVIEW</span>
+          </div>
+          <div id="confirm-preview-body" class="confirm-preview"></div>
+          <div class="confirm-actions">
+            <button type="button" id="open-confirm-dialog-btn" class="btn-primary">
+              Confirm &amp; Create Mock HR Ticket
+            </button>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <aside class="inspector" aria-label="Evidence Citations and MCP Trace Inspector">
+      <section class="panel-card inspector-card">
+        <div class="tablist" role="tablist" aria-label="Inspector views">
+          <button
+            type="button"
+            id="tab-citations"
+            role="tab"
+            aria-selected="true"
+            aria-controls="panel-citations"
+            class="tab-btn active"
+          >
+            Citations (<span id="citations-count">0</span>)
+          </button>
+          <button
+            type="button"
+            id="tab-trace"
+            role="tab"
+            aria-selected="false"
+            aria-controls="panel-trace"
+            class="tab-btn"
+          >
+            MCP Trace (<span id="trace-count">0</span>)
+          </button>
+        </div>
+
+        <div id="panel-citations" role="tabpanel" aria-labelledby="tab-citations" class="inspector-panel">
+          <h2>Retrieved Policy Snippets</h2>
+          <div id="citations-list" class="stack-list">
+            <p class="placeholder-text">Retrieved policy chunks and exact section/page anchors will appear here.</p>
+          </div>
+        </div>
+
+        <div id="panel-trace" role="tabpanel" aria-labelledby="tab-trace" class="inspector-panel" hidden>
+          <h2>Operational MCP Tool Calls</h2>
+          <p class="muted-text">Live JSON-RPC tool invocations (chain-of-thought suppressed per safety policy).</p>
+          <ol id="trace-list" class="trace-list"></ol>
+        </div>
+      </section>
+    </aside>
+  </div>
+
+  <dialog id="confirm-dialog" class="modal-dialog" aria-labelledby="dialog-title">
+    <h2 id="dialog-title">Confirm Synthetic HR Ticket Creation</h2>
+    <p class="muted-text">
+      This will persist a synthetic ticket record (<code>is_mock: true</code>) into
+      <code>mock_data/tickets.json</code> via the MCP <code>create_mock_hr_ticket</code> tool.
+    </p>
+    <pre id="dialog-payload-preview" class="draft-pre"></pre>
+    <div class="dialog-actions">
+      <button type="button" id="dialog-cancel-btn" class="btn-secondary">Cancel</button>
+      <button type="button" id="dialog-confirm-btn" class="btn-primary">Confirm &amp; Persist Mock Ticket</button>
+    </div>
+  </dialog>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
