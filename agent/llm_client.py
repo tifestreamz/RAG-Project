@@ -10,6 +10,7 @@ import re
 from typing import Any
 
 from agent.guardrails import (
+    has_explicit_ticket_intent,
     sanitize_tool_arguments,
     summarize_tool_output,
 )
@@ -22,8 +23,8 @@ SYSTEM_PROMPT = """You are the Northstar Cloud Labs HR Policy & Operations Agent
 Follow these strict rules:
 1. NEVER invent company policy rules, dollar caps, day limits, employee balances, or document IDs. Always invoke the discovered MCP tools (`search_policy_documents`, `get_policy_section`, `lookup_employee_profile`, `check_pto_balance`, `lookup_benefits_status`, `check_policy_compliance`, `draft_hr_email`, `create_mock_hr_ticket`) to obtain facts.
 2. When evaluating an employee request, call the relevant lookup tools and `check_policy_compliance` BEFORE drafting communications or recommending approvals.
-3. Only call `create_mock_hr_ticket` with `confirmed=false` (preview mode). Never claim a ticket was persisted or an external email was actually sent.
-4. For P1 harassment, retaliation, discrimination, or safety escalations (`POL-010`, `POL-011`), NEVER recommend CCing a direct manager if the manager may be involved; route strictly to `ethics@northstarcloud.example`.
+3. Only call `create_mock_hr_ticket` with `confirmed=false` (preview mode). ALWAYS call `create_mock_hr_ticket(confirmed=false)` whenever the user asks to create, open, file, prepare, log, or submit an HR ticket, OR when a policy evaluation triggers an escalation, exception, or non-compliance (including P1/P2 cases). Infer the closest category (`remote_work`, `pto_leave`, `expense_ld`, `benefits`, `equipment_infosec`, `ethics_confidential`, or `general_hr`) without asking the user to supply a category name, and use `employee_id="EMP-UNKNOWN"` only when a confidential P1 reporter is unspecified. Never claim a ticket was persisted or an external email was sent.
+4. For P1 harassment, retaliation, discrimination, or safety escalations (`POL-010`, `POL-011`), NEVER recommend CCing a direct manager if the manager may be involved; route strictly to `ethics@northstarcloud.example`, draft the confidential notice with `draft_hr_email` (`cc_list=[]`), and stage a P1 ticket preview with `create_mock_hr_ticket` (`confirmed=false`).
 5. If `search_policy_documents` indicates `below_threshold=true` or returns no relevant Northstar policy evidence, politely abstain and state that the request is outside Northstar Cloud Labs' indexed HR policies.
 6. Format EVERY policy/workflow response using these two markdown headings:
 ### Policy Facts (Cited)
@@ -187,6 +188,133 @@ def _collect_artifacts_from_tool_call(
     return step_citations
 
 
+async def _execute_and_record_tool(
+    mcp_client: MCPClientManager,
+    tool_name: str,
+    arguments: dict[str, Any],
+    trace: list[dict[str, Any]],
+    citations_map: dict[str, dict[str, Any]],
+    state: dict[str, Any],
+) -> tuple[dict[str, Any], bool]:
+    """Sanitize arguments, invoke an MCP tool, update artifacts, and append a trace step."""
+    args = sanitize_tool_arguments(tool_name, arguments)
+    call_res = await mcp_client.call_tool(tool_name, args)
+    payload = call_res["result"]
+    step_cites = _collect_artifacts_from_tool_call(
+        tool_name, payload, citations_map, state
+    )
+    trace.append(
+        {
+            "step": len(trace) + 1,
+            "tool_name": tool_name,
+            "arguments": args,
+            "output_summary": summarize_tool_output(tool_name, payload),
+            "citations": step_cites,
+            "duration_ms": call_res["duration_ms"],
+            "status": "ok" if call_res["ok"] else "error",
+        }
+    )
+    return payload, bool(call_res["ok"])
+
+
+def _infer_ticket_category(
+    text: str,
+    is_p1_ethics: bool = False,
+    compliance: dict[str, Any] | None = None,
+) -> str:
+    """Map query text or compliance outcome to a concise mock HR ticket category."""
+    if is_p1_ethics:
+        return "ethics_confidential"
+    req_type = str((compliance or {}).get("request_type") or "").lower()
+    if req_type in {"international_remote_work", "remote_work"}:
+        return "remote_work"
+    if req_type in {"pto_request", "leave"}:
+        return "pto_leave"
+    if req_type in {"expense_or_ld", "expense", "ld"}:
+        return "expense_ld"
+    if req_type == "ethics_escalation":
+        return "ethics_confidential"
+
+    lower = (text or "").lower()
+    if any(k in lower for k in ("workcation", "international", "remote", "relocat")):
+        return "remote_work"
+    if any(k in lower for k in ("loaner", "laptop", "security", "vpn", "mfa", "device")):
+        return "equipment_infosec"
+    if any(k in lower for k in ("pto", "vacation", "leave", "holiday", "recharge")):
+        return "pto_leave"
+    if any(k in lower for k in ("expense", "reimburse", "l&d", "conference", "travel", "$")):
+        return "expense_ld"
+    if any(k in lower for k in ("benefit", "401k", "401(k)", "stipend", "contractor", "ergonomic")):
+        return "benefits"
+    return "general_hr"
+
+
+def _build_ticket_args(
+    user_query: str,
+    emp: dict[str, Any] | None,
+    compliance: dict[str, Any] | None,
+    citations_map: dict[str, dict[str, Any]],
+    resolved_emp_id: str | None = None,
+    is_p1_ethics: bool = False,
+    prior_context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build sanitized preview arguments for `create_mock_hr_ticket`."""
+    ctx = prior_context or {}
+    combined_text = " ".join(
+        p for p in (ctx.get("previous_query", ""), user_query) if p
+    ).strip()
+    emp_id = (
+        (emp or {}).get("employee_id")
+        or resolved_emp_id
+        or (ctx.get("employee_id") if str(ctx.get("employee_id") or "").upper() != "EMP-UNKNOWN" else None)
+        or "EMP-UNKNOWN"
+    )
+    emp_name = (emp or {}).get("name") or ctx.get("employee_name") or ""
+
+    category = _infer_ticket_category(combined_text, is_p1_ethics=is_p1_ethics, compliance=compliance)
+    comp = compliance or {}
+    if is_p1_ethics:
+        priority = "P1"
+    elif comp.get("recommended_priority") in {"P1", "P2", "P3"}:
+        priority = comp["recommended_priority"]
+    elif (emp or {}).get("employment_type") == "Contractor" or any(
+        k in combined_text.lower() for k in ("exception", "escalation", "retaliat", "harass", "loaner")
+    ):
+        priority = "P2"
+    else:
+        priority = "P3"
+
+    topic_src = str(ctx.get("previous_query") or user_query).strip()
+    topic_short = topic_src[:150]
+    if is_p1_ethics:
+        summary = f"Confidential P1 Ethics/Conduct Escalation: {topic_src[:180]}"
+    elif comp.get("status"):
+        who = f"{emp_name} ({emp_id})" if emp_name else emp_id
+        summary = f"{comp['status']}: {who} — {topic_short}"
+    elif emp_name and emp_id != "EMP-UNKNOWN":
+        summary = f"HR Support Request: {emp_name} ({emp_id}) — {topic_short}"
+    else:
+        summary = f"HR Support Request ({emp_id}): {topic_short}"
+
+    refs = [c.split(" ")[0] for c in comp.get("policy_citations", []) if c]
+    if not refs:
+        refs = [c.get("doc_id", "") for c in citations_map.values() if c.get("doc_id")]
+    if not refs and ctx.get("policy_doc_ids"):
+        refs = [str(d) for d in ctx["policy_doc_ids"] if d]
+    if is_p1_ethics:
+        refs = ["POL-010", "POL-011", *[r for r in refs if r not in {"POL-010", "POL-011"}]]
+    clean_refs = list(dict.fromkeys(r for r in refs if r))[:5]
+
+    return {
+        "employee_id": emp_id,
+        "category": category,
+        "priority": priority,
+        "summary": summary,
+        "policy_references": clean_refs,
+        "confirmed": False,
+    }
+
+
 class GeminiAgentRunner:
     """Stateless Gemini 3.5 Flash-Lite Interactions API agent driving live MCP tools."""
 
@@ -226,6 +354,7 @@ class GeminiAgentRunner:
         mcp_client: MCPClientManager,
         resolved_employee_id: str | None = None,
         is_p1_ethics: bool = False,
+        prior_context: dict[str, Any] | None = None,
     ) -> AgentTurnResult:
         discovered: list[DiscoveredTool] = await mcp_client.list_tools()
         tool_decls = [t.to_gemini_declaration() for t in discovered]
@@ -233,8 +362,20 @@ class GeminiAgentRunner:
         prompt_text = user_query
         if resolved_employee_id and resolved_employee_id not in user_query.upper():
             prompt_text = f"{user_query}\n[Resolved Employee ID: {resolved_employee_id}]"
+        if prior_context:
+            ctx_parts = []
+            if prior_context.get("employee_id"):
+                ctx_parts.append(f"Employee ID: {prior_context['employee_id']}")
+            if prior_context.get("employee_name"):
+                ctx_parts.append(f"Employee Name: {prior_context['employee_name']}")
+            if prior_context.get("previous_query"):
+                ctx_parts.append(f"Previous Question: {str(prior_context['previous_query'])[:240]}")
+            if prior_context.get("policy_doc_ids"):
+                ctx_parts.append(f"Prior Policy Docs: {', '.join(prior_context['policy_doc_ids'])}")
+            if ctx_parts:
+                prompt_text += "\n[Prior Conversation Context — " + " | ".join(ctx_parts) + "]"
         if is_p1_ethics:
-            prompt_text += "\n[Safety Flag: Potential P1 Harassment/Retaliation report — follow POL-010/POL-011 confidentiality rules strictly.]"
+            prompt_text += "\n[Safety Flag: Potential P1 Harassment/Retaliation report — follow POL-010/POL-011 confidentiality rules strictly, draft ethics email with cc_list=[], and stage P1 ticket preview.]"
 
         history: list[dict[str, Any]] = [
             {"type": "user_input", "content": [{"type": "text", "text": prompt_text}]}
@@ -269,29 +410,20 @@ class GeminiAgentRunner:
                 break
 
             for fc in function_calls:
-                args = sanitize_tool_arguments(fc.name, dict(fc.arguments or {}))
-                call_res = await mcp_client.call_tool(fc.name, args)
-                payload = call_res["result"]
-                step_cites = _collect_artifacts_from_tool_call(
-                    fc.name, payload, citations_map, state
-                )
-                trace.append(
-                    {
-                        "step": len(trace) + 1,
-                        "tool_name": fc.name,
-                        "arguments": args,
-                        "output_summary": summarize_tool_output(fc.name, payload),
-                        "citations": step_cites,
-                        "duration_ms": call_res["duration_ms"],
-                        "status": "ok" if call_res["ok"] else "error",
-                    }
+                payload, ok = await _execute_and_record_tool(
+                    mcp_client,
+                    fc.name,
+                    dict(fc.arguments or {}),
+                    trace,
+                    citations_map,
+                    state,
                 )
                 history.append(
                     {
                         "type": "function_result",
                         "call_id": fc.id,
                         "name": fc.name,
-                        "is_error": not call_res["ok"],
+                        "is_error": not ok,
                         "result": [{"type": "text", "text": json.dumps(payload)}],
                     }
                 )
@@ -308,6 +440,57 @@ class GeminiAgentRunner:
             and bool(state["last_below_threshold"])
             and not bool(state["any_in_threshold_hit"])
         )
+
+        # Guarantee ticket preview (confirmed=false) & P1 confidential routing when warranted
+        ui_emp = state.get("ui_context", {}).get("employee")
+        ui_comp = state.get("ui_context", {}).get("compliance")
+        wants_ticket = has_explicit_ticket_intent(user_query)
+        if not abstained and (wants_ticket or is_p1_ethics):
+            if is_p1_ethics and state["draft_email"] is None:
+                ref_emp = resolved_employee_id or "EMP-UNKNOWN"
+                await _execute_and_record_tool(
+                    mcp_client,
+                    "draft_hr_email",
+                    {
+                        "recipient": "ethics@northstarcloud.example",
+                        "cc_list": [],
+                        "subject": f"[CONFIDENTIAL P1] Ethics & Conduct Escalation ({ref_emp})",
+                        "body": (
+                            "CONFIDENTIAL PRIORITY P1 REPORT (SLA: 4 Business Hours)\n"
+                            f"Reference Employee: {resolved_employee_id or 'Unspecified / Confidential Reporter'}\n"
+                            f"Summary: {user_query[:300]}\n\n"
+                            "Per POL-010 and POL-011 Sec 2.1, the direct manager has NOT been "
+                            "copied to preserve strict anti-retaliation confidentiality."
+                        ),
+                    },
+                    trace,
+                    citations_map,
+                    state,
+                )
+            if state["pending_confirmation"] is None:
+                ticket_args = _build_ticket_args(
+                    user_query=user_query,
+                    emp=ui_emp,
+                    compliance=ui_comp,
+                    citations_map=citations_map,
+                    resolved_emp_id=resolved_employee_id,
+                    is_p1_ethics=is_p1_ethics,
+                    prior_context=prior_context,
+                )
+                await _execute_and_record_tool(
+                    mcp_client,
+                    "create_mock_hr_ticket",
+                    ticket_args,
+                    trace,
+                    citations_map,
+                    state,
+                )
+                if "confirm" not in final_text.lower():
+                    final_text = (
+                        f"{final_text}\n- **Mock HR Ticket Queued (Preview · not saved):** "
+                        "Review the staged HR ticket card and click **Confirm & create ticket** to persist it."
+                    )
+
         return AgentTurnResult(
             answer=final_text,
             mode_used="gemini",
@@ -387,22 +570,8 @@ class MockAgentRunner:
         citations_map: dict[str, dict[str, Any]],
         state: dict[str, Any],
     ) -> dict[str, Any]:
-        args = sanitize_tool_arguments(tool_name, arguments)
-        call_res = await mcp_client.call_tool(tool_name, args)
-        payload = call_res["result"]
-        step_cites = _collect_artifacts_from_tool_call(
-            tool_name, payload, citations_map, state
-        )
-        trace.append(
-            {
-                "step": len(trace) + 1,
-                "tool_name": tool_name,
-                "arguments": args,
-                "output_summary": summarize_tool_output(tool_name, payload),
-                "citations": step_cites,
-                "duration_ms": call_res["duration_ms"],
-                "status": "ok" if call_res["ok"] else "error",
-            }
+        payload, _ = await _execute_and_record_tool(
+            mcp_client, tool_name, arguments, trace, citations_map, state
         )
         return payload
 
@@ -412,6 +581,7 @@ class MockAgentRunner:
         mcp_client: MCPClientManager,
         resolved_employee_id: str | None = None,
         is_p1_ethics: bool = False,
+        prior_context: dict[str, Any] | None = None,
     ) -> AgentTurnResult:
         # Discover tools dynamically over real MCP ClientSession
         await mcp_client.list_tools()
@@ -433,11 +603,17 @@ class MockAgentRunner:
 
         if resolved_employee_id:
             return await self._run_employee_workflow(
-                user_query, resolved_employee_id, mcp_client, trace, citations_map, state
+                user_query,
+                resolved_employee_id,
+                mcp_client,
+                trace,
+                citations_map,
+                state,
+                prior_context=prior_context,
             )
 
         return await self._run_policy_qa(
-            user_query, mcp_client, trace, citations_map, state
+            user_query, mcp_client, trace, citations_map, state, prior_context=prior_context
         )
 
     async def _run_p1_ethics_workflow(
@@ -461,7 +637,7 @@ class MockAgentRunner:
             citations_map,
             state,
         )
-        target_emp = emp_id or "EMP-1042"
+        target_emp = emp_id or "EMP-UNKNOWN"
         if emp_id:
             await self._exec(
                 mcp_client,
@@ -548,6 +724,7 @@ class MockAgentRunner:
         trace: list[dict[str, Any]],
         citations_map: dict[str, dict[str, Any]],
         state: dict[str, Any],
+        prior_context: dict[str, Any] | None = None,
     ) -> AgentTurnResult:
         emp_resp = await self._exec(
             mcp_client,
@@ -725,6 +902,7 @@ class MockAgentRunner:
             )
 
         # Draft approval / exception email + ticket preview when actionable workflow detected
+        wants_ticket = has_explicit_ticket_intent(user_query)
         is_action_request = (
             is_intl
             or comp_resp is not None
@@ -758,27 +936,41 @@ class MockAgentRunner:
                 status == "NON_COMPLIANT"
                 or prio in {"P1", "P2"}
                 or bool(comp_resp.get("metrics", {}).get("requires_loaner_laptop"))
+                or wants_ticket
                 or any(k in lower for k in ("ticket", "submit", "log case"))
             )
             if needs_ticket:
-                category = "remote_work" if is_intl else ("pto_exception" if wants_pto else "expense")
                 await self._exec(
                     mcp_client,
                     "create_mock_hr_ticket",
-                    {
-                        "employee_id": emp_id,
-                        "category": category,
-                        "priority": prio,
-                        "summary": f"{status}: {emp['name']} ({emp_id}) — {user_query[:160]}",
-                        "policy_references": [
-                            c.split(" ")[0] for c in comp_resp.get("policy_citations", [])
-                        ],
-                        "confirmed": False,
-                    },
+                    _build_ticket_args(
+                        user_query=user_query,
+                        emp=emp,
+                        compliance=comp_resp,
+                        citations_map=citations_map,
+                        resolved_emp_id=emp_id,
+                        prior_context=prior_context,
+                    ),
                     trace,
                     citations_map,
                     state,
                 )
+        elif wants_ticket:
+            await self._exec(
+                mcp_client,
+                "create_mock_hr_ticket",
+                _build_ticket_args(
+                    user_query=user_query,
+                    emp=emp,
+                    compliance=comp_resp,
+                    citations_map=citations_map,
+                    resolved_emp_id=emp_id,
+                    prior_context=prior_context,
+                ),
+                trace,
+                citations_map,
+                state,
+            )
 
         answer = self._format_employee_answer(
             emp=emp,
@@ -923,6 +1115,7 @@ class MockAgentRunner:
         trace: list[dict[str, Any]],
         citations_map: dict[str, dict[str, Any]],
         state: dict[str, Any],
+        prior_context: dict[str, Any] | None = None,
     ) -> AgentTurnResult:
         search_res = await self._exec(
             mcp_client,
@@ -990,18 +1183,44 @@ class MockAgentRunner:
             )
 
         top_doc = filtered_hits[0]["doc_id"] if filtered_hits else "POL-001"
+        next_step = (
+            f"- Apply the requirements above per `{top_doc}` (see the **Citations & Snippets** panel for "
+            "verbatim policy text). Provide an employee ID (e.g., `EMP-1042`, `EMP-1018`, `EMP-1055`) if you "
+            "would like an automated compliance evaluation or approval draft."
+        )
+        if has_explicit_ticket_intent(user_query):
+            await self._exec(
+                mcp_client,
+                "create_mock_hr_ticket",
+                _build_ticket_args(
+                    user_query=user_query,
+                    emp=None,
+                    compliance=None,
+                    citations_map=citations_map,
+                    prior_context=prior_context,
+                ),
+                trace,
+                citations_map,
+                state,
+            )
+            next_step = (
+                "- **Mock HR Ticket Queued (Unconfirmed):** Click **Confirm & create ticket** to "
+                "persist the synthetic record previewed below."
+            )
         answer = (
             "### Policy Facts (Cited)\n"
             + "\n".join(fact_bullets)
             + "\n\n### Recommended Next Steps\n"
-            + f"- Apply the requirements above per `{top_doc}` (see the **Citations & Snippets** panel for "
-              "verbatim policy text). Provide an employee ID (e.g., `EMP-1042`, `EMP-1018`, `EMP-1055`) if you "
-              "would like an automated compliance evaluation or approval draft."
+            + next_step
         )
         return AgentTurnResult(
             answer=answer,
             mode_used="mock",
             trace=trace,
             citations=list(citations_map.values()),
+            draft_email=state["draft_email"],
+            pending_confirmation=state["pending_confirmation"],
+            escalation=state["escalation"],
             abstained=False,
+            ui_context=state.get("ui_context", {}),
         )

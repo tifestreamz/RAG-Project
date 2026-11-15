@@ -34,6 +34,7 @@ class ChatRequest(BaseModel):
 
     message: str = Field(..., max_length=4000)
     provider_override: Literal["auto", "gemini", "mock"] | None = None
+    context: dict[str, Any] | None = None
 
 
 class ConfirmTicketRequest(BaseModel):
@@ -672,6 +673,7 @@ async def chat_endpoint(req: ChatRequest) -> dict[str, Any]:
         return await orchestrator.handle_query(
             user_query=req.message,
             provider_override=req.provider_override,
+            conversation_context=req.context,
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Agent execution error: {exc}") from exc

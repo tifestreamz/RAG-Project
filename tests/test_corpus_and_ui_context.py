@@ -24,6 +24,35 @@ def test_chat_returns_structured_ui_context_for_compliance_queries() -> None:
         assert ui_ctx["compliance"]["metrics"]["requested_days"] == 42
         assert ui_ctx["compliance"]["metrics"]["projected_rolling_total"] == 47
 
+        step1 = client.post(
+            "/chat",
+            json={
+                "message": "Can contractor Jordan Brooks (EMP-1089) claim a $500 home office ergonomic chair stipend?",
+                "provider_override": "mock",
+            },
+        )
+        assert step1.status_code == 200
+        d1 = step1.json()
+        assert d1["ui_context"]["employee"]["employee_id"] == "EMP-1089"
+
+        step2 = client.post(
+            "/chat",
+            json={
+                "message": "Prepare a mock HR ticket preview for this request.",
+                "provider_override": "mock",
+                "context": {
+                    "previous_query": "Can contractor Jordan Brooks (EMP-1089) claim a $500 home office ergonomic chair stipend?",
+                    "employee_id": "EMP-1089",
+                    "employee_name": "Jordan Brooks",
+                    "policy_doc_ids": ["POL-012", "POL-004"],
+                },
+            },
+        )
+        assert step2.status_code == 200
+        d2 = step2.json()
+        assert d2["pending_confirmation"] is not None
+        assert d2["pending_confirmation"]["employee_id"] == "EMP-1089"
+
 
 def test_corpus_endpoints_format_all_twelve_documents() -> None:
     with TestClient(app) as client:

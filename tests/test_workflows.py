@@ -65,5 +65,49 @@ async def test_multi_step_agentic_workflows() -> None:
         assert p1["draft_email"]["to"] == "ethics@northstarcloud.example"
         assert p1["draft_email"]["cc"] == []
         assert p1["pending_confirmation"]["priority"] == "P1"
+        assert p1["pending_confirmation"]["employee_id"] == "EMP-UNKNOWN"
+
+        p1_comp = await mcp_client.call_tool(
+            "check_policy_compliance",
+            {"employee_id": "EMP-1042", "request_type": "ethics_escalation"},
+        )
+        assert p1_comp["ok"] is True
+        assert p1_comp["result"]["status"] == "ESCALATION_REQUIRED"
+        assert p1_comp["result"]["recommended_priority"] == "P1"
+
+        # Direct ticket request for named employee (without compliance keywords)
+        direct_ticket = await orch.handle_query(
+            "Create a ticket for Carlos Vega",
+            provider_override="mock",
+        )
+        assert direct_ticket["status"] == "completed"
+        assert direct_ticket["pending_confirmation"] is not None
+        assert direct_ticket["pending_confirmation"]["employee_id"] == "EMP-1018"
+        assert direct_ticket["pending_confirmation"]["is_mock"] is True
+
+        # Follow-up ticket creation using prior turn context
+        follow_up = await orch.handle_query(
+            "Create a ticket for this",
+            provider_override="mock",
+            conversation_context={
+                "previous_query": "Can contractor Jordan Brooks (EMP-1089) take 3 PTO days?",
+                "employee_id": "EMP-1089",
+                "employee_name": "Jordan Brooks",
+                "policy_doc_ids": ["POL-012", "POL-001"],
+            },
+        )
+        assert follow_up["status"] == "completed"
+        assert follow_up["pending_confirmation"] is not None
+        assert follow_up["pending_confirmation"]["employee_id"] == "EMP-1089"
+        assert follow_up["pending_confirmation"]["priority"] == "P3"
+        assert "NON_COMPLIANT" in follow_up["pending_confirmation"]["summary"]
+
+        # Bare ticket request without context or topic prompts for clarification
+        bare = await orch.handle_query(
+            "Create a ticket for me",
+            provider_override="mock",
+        )
+        assert bare["status"] == "clarification_needed"
+        assert "missing_ticket_details" in bare["guardrail_flags"]
     finally:
         await mcp_client.close()

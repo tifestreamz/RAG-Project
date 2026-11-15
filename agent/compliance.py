@@ -435,7 +435,7 @@ def evaluate_policy_compliance(
         )
     elif req in {"expense", "ld", "reimbursement", "expense_or_ld"}:
         result = _evaluate_expense_or_ld(emp, benefits, amount_usd, during_blackout)
-    elif req in {"ethics", "harassment", "retaliation", "p1_escalation"}:
+    elif req in {"ethics", "harassment", "retaliation", "p1_escalation", "ethics_escalation"}:
         result = {
             "eligible": False,
             "status": "ESCALATION_REQUIRED",

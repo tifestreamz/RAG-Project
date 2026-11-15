@@ -274,7 +274,7 @@ body {
 
 .btn-dark:disabled {
   opacity: 0.55;
-  cursor: wait;
+  cursor: default;
 }
 
 .btn-outline {
@@ -298,6 +298,12 @@ body {
 .btn-outline:hover:not(:disabled) {
   background: var(--surface-subtle);
   border-color: var(--border-strong);
+}
+
+.btn-sm {
+  padding: 5px 10px;
+  font-size: 0.77rem;
+  border-radius: 7px;
 }
 
 .btn-icon {
@@ -552,6 +558,11 @@ body {
   padding: 10px 12px;
 }
 
+.ticket-mini-card.is-pending {
+  background: #fdf9ef;
+  border-color: var(--amber-border);
+}
+
 .ticket-mini-top {
   display: flex;
   align-items: center;
@@ -571,6 +582,29 @@ body {
   font-size: 0.71rem;
   font-weight: 500;
   color: var(--muted);
+}
+
+.ticket-mini-status.pending {
+  color: var(--amber-fg);
+  font-weight: 600;
+}
+
+.ticket-mini-action {
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--ink);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.ticket-mini-action:hover {
+  color: var(--teal);
 }
 
 .ticket-mini-summary {
@@ -763,6 +797,45 @@ body {
   margin: 0;
   font-size: 0.83rem;
   color: var(--muted);
+}
+
+.verdict-ticket-bar {
+  margin-top: 15px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-light);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.verdict-ticket-note {
+  font-size: 0.8rem;
+  color: var(--ink-2);
+  font-weight: 500;
+}
+
+.verdict-ticket-note.amber {
+  color: var(--amber-fg);
+  font-weight: 600;
+}
+
+.verdict-ticket-note.teal {
+  color: var(--teal);
+  font-weight: 600;
+}
+
+.verdict-ticket-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+#hr-ticket-card.ticket-highlight {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 2px rgba(27, 26, 22, 0.12);
 }
 
 .metric-trio {

@@ -27,6 +27,23 @@ _ETHICS_P1_RE = re.compile(
 
 _EMP_ID_RE = re.compile(r"\b(EMP-\d{3,5})\b", re.I)
 
+_TICKET_INTENT_RE = re.compile(
+    r"(?:"
+    r"\b(?:create|prepare|file|open|log|submit|raise|stage|make|generate)\s+"
+    r"(?:a\s+|an\s+|the\s+)?(?:mock\s+|hr\s+|support\s+|escalation\s+|confidential\s+)*ticket\b|"
+    r"\b(?:log|open|file|create)\s+(?:a\s+|an\s+)?case\b|"
+    r"\bticket\s+for\s+(?:this|that|it|him|her|them|me|emp-\d{3,5})\b"
+    r")",
+    re.I,
+)
+
+_TICKET_FILLER_WORDS_RE = re.compile(
+    r"\b(?:please|can|could|would|you|i|we|need|want|to|create|prepare|file|open|log|"
+    r"submit|raise|stage|make|generate|a|an|the|mock|hr|support|case|ticket|for|"
+    r"me|my|us|our|this|that|it|them|him|her|now|right)\b",
+    re.I,
+)
+
 KNOWN_EMPLOYEE_ALIASES: dict[str, str] = {
     "elena rostova": "EMP-1001",
     "marcus vance": "EMP-1002",
@@ -121,6 +138,22 @@ def resolve_employee_id(text: str) -> str | None:
         if name in lower:
             return emp_id
     return None
+
+
+def has_explicit_ticket_intent(text: str) -> bool:
+    """Return True when the user explicitly asks to stage, open, file, or create a ticket."""
+    return bool(_TICKET_INTENT_RE.search(text or ""))
+
+
+def is_bare_ticket_request(text: str) -> bool:
+    """Return True for vague ticket requests missing both employee identity and policy topic."""
+    if not has_explicit_ticket_intent(text):
+        return False
+    if resolve_employee_id(text) is not None or _ETHICS_P1_RE.search(text):
+        return False
+    residual = _TICKET_FILLER_WORDS_RE.sub(" ", text or "")
+    residual = re.sub(r"[^a-zA-Z0-9]+", " ", residual).strip()
+    return len(residual) < 4
 
 
 def check_input_guardrails(user_query: str) -> InputGuardrailOutcome:

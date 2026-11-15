@@ -52,18 +52,28 @@ const TIER_SHORT = {
 };
 
 const CATEGORY_LABELS = {
+  remote_work: "Remote work · International workcation",
   remote_work_exception: "Remote work · Global mobility exception",
   international_remote_work: "Remote work · International workcation",
   travel_loaner_device: "IT Security · Clean travel loaner",
+  equipment_infosec: "IT Security · Hardware & travel devices",
+  pto_leave: "Leave · Paid time off & holidays",
+  pto_exception: "Leave · PTO & coverage review",
+  expense_ld: "Finance · Expense & L&D approval",
+  benefits: "Benefits & stipends",
+  ethics_confidential: "Confidential Ethics / Speak-Up",
   ethics_escalation: "Confidential Ethics / Speak-Up",
   leave_and_pto: "Leave · PTO & recharge week",
   contractor_eligibility: "Workforce · Contractor engagement",
+  general_hr: "General People Operations",
 };
 
 let isSubmitting = false;
 let currentPendingTicket = null;
 let currentDraftEmail = null;
 let ticketCreatedState = null;
+let savedTicketsCache = [];
+let lastChatContext = null;
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -213,6 +223,7 @@ function renderDemoExamples(tasks) {
       if (!target) return;
       demoButtons.querySelectorAll(".example-card").forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
+      lastChatContext = null;
       promptInput.value = target.prompt;
       promptInput.focus();
     });
@@ -260,29 +271,67 @@ function renderPersonas(personas) {
   });
 }
 
+function scrollToTicketCard() {
+  const card = document.getElementById("hr-ticket-card");
+  if (!card) return;
+  card.scrollIntoView({ behavior: "smooth", block: "center" });
+  card.classList.add("ticket-highlight");
+  setTimeout(() => card.classList.remove("ticket-highlight"), 1400);
+}
+
+function openConfirmModalForPending() {
+  if (!currentPendingTicket || ticketCreatedState) return;
+  confirmPreview.textContent = JSON.stringify(currentPendingTicket, null, 2);
+  confirmDialog.showModal();
+}
+
 function renderTickets(tickets) {
-  if (!tickets.length) {
+  savedTicketsCache = Array.isArray(tickets) ? tickets : [];
+  const pendingHtml =
+    currentPendingTicket && !ticketCreatedState
+      ? `
+        <article class="ticket-mini-card is-pending" id="sidebar-pending-ticket-card">
+          <div class="ticket-mini-top">
+            <span class="ticket-mini-id">PENDING · ${escapeHtml(currentPendingTicket.priority || "P3")}</span>
+            <span class="ticket-mini-status pending">Preview · not saved</span>
+          </div>
+          <div class="ticket-mini-summary">
+            <strong>${escapeHtml(currentPendingTicket.employee_id || "HR")}:</strong> ${escapeHtml(currentPendingTicket.summary || "")}
+          </div>
+          <button type="button" class="ticket-mini-action" id="sidebar-review-ticket-btn">Review &amp; confirm →</button>
+        </article>
+      `
+      : "";
+
+  if (!savedTicketsCache.length && !pendingHtml) {
     ticketsList.innerHTML = `<div class="ticket-mini-card" style="color: var(--muted);">No mock tickets created yet.</div>`;
     return;
   }
-  const ordered = [...tickets].reverse();
-  ticketsList.innerHTML = ordered
-    .map((t) => {
-      const statusText = String(t.status || "Pending").replace(/_/g, " ");
-      const niceStatus = statusText.charAt(0).toUpperCase() + statusText.slice(1);
-      return `
-        <article class="ticket-mini-card">
-          <div class="ticket-mini-top">
-            <span class="ticket-mini-id">${escapeHtml(t.ticket_id)} · ${escapeHtml(t.priority || "P3")}</span>
-            <span class="ticket-mini-status">${escapeHtml(niceStatus)}</span>
-          </div>
-          <div class="ticket-mini-summary">
-            <strong>${escapeHtml(t.employee_id || "HR")}:</strong> ${escapeHtml(t.summary || "")}
-          </div>
-        </article>
-      `;
-    })
-    .join("");
+  const ordered = [...savedTicketsCache].reverse();
+  ticketsList.innerHTML =
+    pendingHtml +
+    ordered
+      .map((t) => {
+        const statusText = String(t.status || "Pending").replace(/_/g, " ");
+        const niceStatus = statusText.charAt(0).toUpperCase() + statusText.slice(1);
+        return `
+          <article class="ticket-mini-card">
+            <div class="ticket-mini-top">
+              <span class="ticket-mini-id">${escapeHtml(t.ticket_id)} · ${escapeHtml(t.priority || "P3")}</span>
+              <span class="ticket-mini-status">${escapeHtml(niceStatus)}</span>
+            </div>
+            <div class="ticket-mini-summary">
+              <strong>${escapeHtml(t.employee_id || "HR")}:</strong> ${escapeHtml(t.summary || "")}
+            </div>
+          </article>
+        `;
+      })
+      .join("");
+
+  const reviewBtn = document.getElementById("sidebar-review-ticket-btn");
+  if (reviewBtn) {
+    reviewBtn.addEventListener("click", scrollToTicketCard);
+  }
 }
 
 async function refreshTicketsOnly() {
@@ -683,6 +732,33 @@ function buildHeroVerdictCard(data, parsed) {
     `;
   }
 
+  let ticketBarHtml = "";
+  if (pending) {
+    const isSaved = Boolean(ticketCreatedState);
+    ticketBarHtml = `
+      <div class="verdict-ticket-bar" id="verdict-ticket-bar">
+        <span id="verdict-ticket-status" class="verdict-ticket-note ${isSaved ? "teal" : "amber"}">
+          ${isSaved ? `Saved to Mock HR ticket log · ${escapeHtml(ticketCreatedState.ticket_id)}` : "HR ticket preview staged · awaiting confirmation"}
+        </span>
+        <div class="verdict-ticket-actions">
+          <button type="button" id="verdict-review-ticket-btn" class="btn-outline btn-sm">Review ticket ↓</button>
+          <button type="button" id="verdict-confirm-ticket-btn" class="btn-dark btn-sm" ${isSaved ? "disabled" : ""}>
+            ${isSaved ? `Created (${escapeHtml(ticketCreatedState.ticket_id)})` : "Confirm & create ticket"}
+          </button>
+        </div>
+      </div>
+    `;
+  } else if (data.status === "completed" && !data.abstained) {
+    ticketBarHtml = `
+      <div class="verdict-ticket-bar" id="verdict-ticket-bar">
+        <span class="verdict-ticket-note">No HR ticket staged yet for this evaluation.</span>
+        <div class="verdict-ticket-actions">
+          <button type="button" id="verdict-prepare-ticket-btn" class="btn-outline btn-sm">+ Prepare HR ticket preview</button>
+        </div>
+      </div>
+    `;
+  }
+
   return `
     <article class="verdict-card">
       <div class="verdict-pills">
@@ -692,6 +768,7 @@ function buildHeroVerdictCard(data, parsed) {
       <h2 class="verdict-headline">${escapeHtml(headline)}</h2>
       ${subline ? `<p class="verdict-subline">${escapeHtml(subline)}</p>` : ""}
       ${metricsHtml}
+      ${ticketBarHtml}
     </article>
   `;
 }
@@ -889,7 +966,6 @@ function buildTicketCard(ticket) {
               <option value="P1" ${ticket.priority === "P1" ? "selected" : ""}>P1</option>
               <option value="P2" ${ticket.priority === "P2" ? "selected" : ""}>P2</option>
               <option value="P3" ${(!ticket.priority || ticket.priority === "P3") ? "selected" : ""}>P3</option>
-              <option value="P4" ${ticket.priority === "P4" ? "selected" : ""}>P4</option>
             </select>
           </div>
           <div>
@@ -976,6 +1052,11 @@ function wireDynamicCardEvents() {
     priSelect.addEventListener("change", () => {
       currentPendingTicket.priority = priSelect.value;
       if (priDisplay) priDisplay.textContent = priSelect.value;
+      const verdictPill = document.getElementById("verdict-priority-pill");
+      if (verdictPill && !ticketCreatedState) {
+        verdictPill.textContent = `${priSelect.value} · Pending confirmation`;
+      }
+      renderTickets(savedTicketsCache);
     });
   }
   if (summaryInput && currentPendingTicket) {
@@ -985,19 +1066,66 @@ function wireDynamicCardEvents() {
     });
   }
 
+  const verdictReviewBtn = document.getElementById("verdict-review-ticket-btn");
+  if (verdictReviewBtn) {
+    verdictReviewBtn.addEventListener("click", scrollToTicketCard);
+  }
+
+  const verdictConfirmBtn = document.getElementById("verdict-confirm-ticket-btn");
+  if (verdictConfirmBtn) {
+    verdictConfirmBtn.addEventListener("click", openConfirmModalForPending);
+  }
+
+  const verdictPrepareBtn = document.getElementById("verdict-prepare-ticket-btn");
+  if (verdictPrepareBtn) {
+    verdictPrepareBtn.addEventListener("click", () => {
+      submitPrompt("Prepare a mock HR ticket preview for this request.");
+    });
+  }
+
   const confirmBtn = document.getElementById("confirm-ticket-btn");
   if (confirmBtn && currentPendingTicket && !ticketCreatedState) {
-    confirmBtn.addEventListener("click", () => {
-      confirmPreview.textContent = JSON.stringify(currentPendingTicket, null, 2);
-      confirmDialog.showModal();
-    });
+    confirmBtn.addEventListener("click", openConfirmModalForPending);
   }
 }
 
-function renderChatResult(data) {
+function buildChatContextPayload(data, submittedPrompt) {
+  if (!data || data.status !== "completed" || data.abstained) {
+    return null;
+  }
+  const ui = data.ui_context || {};
+  const emp = ui.employee || null;
+  const comp = ui.compliance || null;
+  const pending = data.pending_confirmation || null;
+  const docIds = Array.from(
+    new Set((data.citations || []).map((c) => c.doc_id).filter(Boolean))
+  ).slice(0, 5);
+  return {
+    previous_query: submittedPrompt || "",
+    employee_id:
+      (emp && emp.employee_id) ||
+      (pending && pending.employee_id && pending.employee_id !== "EMP-UNKNOWN"
+        ? pending.employee_id
+        : null),
+    employee_name: (emp && emp.name) || null,
+    request_type: (comp && comp.request_type) || null,
+    policy_doc_ids: docIds,
+    is_p1_ethics: Array.isArray(data.guardrail_flags)
+      ? data.guardrail_flags.includes("p1_confidential_ethics")
+      : false,
+  };
+}
+
+function renderChatResult(data, submittedPrompt = "") {
   currentDraftEmail = data.draft_email || null;
   currentPendingTicket = data.pending_confirmation ? { ...data.pending_confirmation } : null;
   ticketCreatedState = null;
+
+  if (data.status === "completed" && !data.abstained) {
+    lastChatContext = buildChatContextPayload(data, submittedPrompt);
+  } else if (data.status === "blocked" || data.abstained) {
+    lastChatContext = null;
+  }
 
   const sec = typeof data.latency_ms === "number" ? (data.latency_ms / 1000).toFixed(2) : "—";
   const citeCount = (data.citations || []).length;
@@ -1030,12 +1158,16 @@ function renderChatResult(data) {
   outputStack.innerHTML = cards.join("");
   renderCitationsRail(data.citations || []);
   renderTraceRail(data.trace || []);
+  renderTickets(savedTicketsCache);
   wireDynamicCardEvents();
 }
 
-async function submitPrompt() {
-  const prompt = promptInput.value.trim();
+async function submitPrompt(overridePrompt = null) {
+  const prompt = (overridePrompt !== null ? String(overridePrompt) : promptInput.value).trim();
   if (!prompt || isSubmitting) return;
+  if (overridePrompt !== null) {
+    promptInput.value = prompt;
+  }
 
   isSubmitting = true;
   submitBtn.disabled = true;
@@ -1053,6 +1185,7 @@ async function submitPrompt() {
       body: JSON.stringify({
         message: prompt,
         provider_override: providerSelect.value,
+        context: lastChatContext,
       }),
     });
 
@@ -1062,7 +1195,7 @@ async function submitPrompt() {
     }
 
     const data = await resp.json();
-    renderChatResult(data);
+    renderChatResult(data, prompt);
   } catch (err) {
     runStatusStrip.hidden = true;
     errorBanner.hidden = false;
@@ -1082,6 +1215,8 @@ function resetWorkspace() {
   currentPendingTicket = null;
   currentDraftEmail = null;
   ticketCreatedState = null;
+  lastChatContext = null;
+  renderTickets(savedTicketsCache);
 
   outputStack.innerHTML = `
     <div class="empty-workspace-card">
@@ -1144,6 +1279,8 @@ approveConfirmBtn.addEventListener("click", async () => {
     const editBtn = document.getElementById("edit-ticket-btn");
     const editPanel = document.getElementById("ticket-edit-panel");
     const verdictPill = document.getElementById("verdict-priority-pill");
+    const verdictTicketStatus = document.getElementById("verdict-ticket-status");
+    const verdictConfirmBtn = document.getElementById("verdict-confirm-ticket-btn");
 
     if (statusEl) {
       statusEl.className = "surface-card-subtitle";
@@ -1159,6 +1296,14 @@ approveConfirmBtn.addEventListener("click", async () => {
     if (editPanel) editPanel.hidden = true;
     if (verdictPill) {
       verdictPill.textContent = `${currentPendingTicket.priority || "P3"} · Confirmed ${ticketCreatedState.ticket_id}`;
+    }
+    if (verdictTicketStatus) {
+      verdictTicketStatus.className = "verdict-ticket-note teal";
+      verdictTicketStatus.textContent = `Saved to Mock HR ticket log · ${ticketCreatedState.ticket_id}`;
+    }
+    if (verdictConfirmBtn) {
+      verdictConfirmBtn.disabled = true;
+      verdictConfirmBtn.textContent = `Created (${ticketCreatedState.ticket_id})`;
     }
 
     await refreshTicketsOnly();
